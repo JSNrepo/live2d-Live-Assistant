@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Live2D Companion</title>
+  <!-- Load PIXI.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/5.3.12/pixi.min.js"
+    onerror="document.body.innerHTML='<div style=color:red;padding:20px>ERROR: Failed to load PIXI.js from CDN. Check your internet connection.</div>'"></script>
+  <!-- Load Cubism Core -->
+  <script src="https://cdn.jsdelivr.net/npm/live2dcubismcore@1.0.2/live2dcubismcore.min.js"
+    onerror="console.error('Failed to load Cubism Core')"></script>
+  <!-- Load pixi-live2d-display Cubism 4 runtime -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/cubism4.min.js"
+    onerror="console.error('Failed to load pixi-live2d-display')"></script>
+  <!-- Load Google Font Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+    #speech-container {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      width: 240px;
+      max-height: 220px;          /* L03: prevent overflow off-screen */
+      overflow-y: auto;           /* L03: scroll long responses */
+      --vibe-color: rgba(255, 255, 255, 0.22);
+      background: rgba(20, 20, 32, 0.55);
+      border: 1.5px solid var(--vibe-color);
+      border-radius: 16px;
+      padding: 12px 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(25px) saturate(190%);
+      -webkit-backdrop-filter: blur(25px) saturate(190%);
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #speech-container.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #speech-container.compact {
+      width: auto;
+      max-width: 180px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    }
+    #speech-container.compact #speech-header {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    #speech-container.compact #speech-status,
+    #speech-container.compact #speech-text {
+      display: none !important;
+    }
+    #speech-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      padding-bottom: 4px;
+      margin-bottom: 2px;
+    }
+    #speech-vibe {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: rgba(255, 255, 255, 0.85);
+      font-weight: 700;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    #speech-status {
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      color: #ff69b4;
+      font-weight: 800;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    #speech-text {
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.95);
+      font-weight: 500;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      word-wrap: break-word;
+    }
+    #speech-container::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      right: 40px; /* point down-right towards her head */
+      border-width: 8px 8px 0;
+      border-style: solid;
+      border-color: var(--vibe-color) transparent;
+      display: block;
+      width: 0;
+      height: 0;
+      transition: border-color 0.4s ease;
+    }
+  </style>
+</head>
+<body class="pywebview-drag-region">
+  <div id="speech-container" class="pywebview-drag-region">
+    <div id="speech-header" class="pywebview-drag-region">
+      <div id="speech-vibe" class="pywebview-drag-region">😴 Sleeping</div>
+      <div id="speech-status" class="pywebview-drag-region">SLEEPING</div>
+    </div>
+    <div id="speech-text" class="pywebview-drag-region"></div>
+  </div>
+  <canvas id="canvas" class="pywebview-drag-region"></canvas>
+
+  <script>
+    const app = new PIXI.Application({
+      view: document.getElementById('canvas'),
+      transparent: true,
+      autoStart: true,
+      resizeTo: window
+    });
+
+    let live2dModel;
+    let currentEmotion = "idle";
+    let currentState = "LISTENING";
+    let currentMouth = 0.0;
+    let startledActive = false;
+
+    // Define core target parameters in the global scope so they are shared
+    let targetEyeOpenL = 1.0;
+    let targetEyeOpenR = 1.0;
+    let targetEyeSmileL = 0.0;
+    let targetEyeSmileR = 0.0;
+    let targetBrowLY = 0.0;
+    let targetBrowRY = 0.0;
+    let targetBrowLX = 0.0;
+    let targetBrowRX = 0.0;
+    let targetBrowLAngleL = 0.0;
+    let targetBrowLAngleR = 0.0;
+    let targetBrowLForm = 0.0;
+    let targetBrowRForm = 0.0;
+    let targetCheek = 0.0;
+    let targetTear = 0.0;
+    let targetAngleZ = 0.0;
+    let targetMouthForm = 0.0;
+    let targetMouthOpenScale = 1.0;
+
+    // Define active rendered expression values for smooth independent blending (motion-immune)
+    let currentRenderedBrowLY = 0.0;
+    let currentRenderedBrowRY = 0.0;
+    let currentRenderedBrowLX = 0.0;
+    let currentRenderedBrowRX = 0.0;
+    let currentRenderedBrowLAngleL = 0.0;
+    let currentRenderedBrowLAngleR = 0.0;
+    let currentRenderedBrowLForm = 0.0;
+    let currentRenderedBrowRForm = 0.0;
+    let currentRenderedCheek = 0.0;
+    let currentRenderedEyeLSmile = 0.0;
+    let currentRenderedEyeRSmile = 0.0;
+    let currentRenderedMouthForm = 0.5;
+
+    // Load scale and y-position dynamically from standard config
+    let scaleVal = 0.32;
+    let yOffset = -120;
+
+    async function init() {
+      try {
+        // Load the config file of the self-contained Hiyori model with autoUpdate disabled
+        live2dModel = await PIXI.live2d.Live2DModel.from('live2d_model/hiyori_pro_t11.model3.json', { autoUpdate: false });
+        app.stage.addChild(live2dModel);
+        window.live2dModel = live2dModel; // Expose to window for debugger inspects
+
+        // Adjust dimensions to show only the face
+        live2dModel.scale.set(scaleVal); 
+        live2dModel.x = window.innerWidth / 2 - (live2dModel.width / 2);
+        live2dModel.y = yOffset;
+
+        // Premium Cursor/Mouse Tracking: character's eyes follow cursor & petting/rubbing/tickling gesture detection
+        let lastMoveTime = 0;
+        let lastMoveX = 0;
+        let petAccumulator = 0;
+        let cheekAccumulator = 0;
+        let tickleAccumulator = 0;
+        
+        app.stage.interactive = true;
+        app.stage.on('pointermove', (event) => {
+          if (live2dModel && currentState !== 'THINKING') {
+            live2dModel.focus(event.data.global.x, event.data.global.y);
+            
+            const localPoint = live2dModel.toLocal(event.data.global);
+            const bounds = live2dModel.getLocalBounds();
+            if (bounds && bounds.height > 0) {
+              const localYFraction = (localPoint.y - bounds.y) / bounds.height;
+              const localXFraction = (localPoint.x - bounds.x) / bounds.width;
+              const now = Date.now();
+              
+              if (now - lastMoveTime < 150) {
+                const dist = Math.abs(event.data.global.x - lastMoveX);
+                if (dist > 15) {
+                  if (localYFraction < 0.35 && localXFraction >= 0.35 && localXFraction <= 0.65) {
+                    // Head petting (horizontal cursor rubbing in the forehead region)
+                    petAccumulator += 1;
+                    if (petAccumulator > 8) {
+                      console.log("Petting gesture detected via mouse movement!");
+                      window.setEmotion("smug");
+                      petAccumulator = 0;
+                    }
+                  } else if (localYFraction < 0.35 && (localXFraction < 0.35 || localXFraction > 0.65)) {
+                    // Cheek rubbing gesture (sides of the face)
+                    cheekAccumulator += 1;
+                    if (cheekAccumulator > 8) {
+                      console.log("Cheek rubbing gesture detected!");
+                      window.setEmotion("confused");
+                      live2dModel.motion('Flick@Body', 0, 2);
+                      cheekAccumulator = 0;
+                    }
+                  } else if (localYFraction >= 0.60 && localYFraction < 0.80) {
+                    // Tummy tickling gesture
+                    tickleAccumulator += 1;
+                    if (tickleAccumulator > 8) {
+                      console.log("Tummy tickle gesture detected!");
+                      window.setEmotion("smug");
+                      live2dModel.motion('Tap', 0, 2);
+                      tickleAccumulator = 0;
+                    }
+                  }
+                }
+              } else {
+                petAccumulator = Math.max(0, petAccumulator - 1);
+                cheekAccumulator = Math.max(0, cheekAccumulator - 1);
+                tickleAccumulator = Math.max(0, tickleAccumulator - 1);
+              }
+              lastMoveTime = now;
+              lastMoveX = event.data.global.x;
+            }
+          }
+        });
+
+        // Interactive click/poke reactions with premium Cheek Pinch, Head Petting, Chest (Boobs) Angry, and Tummy Tickling hit-zones
+        live2dModel.interactive = true;
+        live2dModel.cursor = 'pointer';
+        live2dModel.on('pointertap', (event) => {
+          console.log("Model tapped!");
+          const localPoint = live2dModel.toLocal(event.data.global);
+          console.log("Local click point:", localPoint.x, localPoint.y);
+          
+          const bounds = live2dModel.getLocalBounds();
+          let localYFraction = 0.5;
+          let localXFraction = 0.5;
+          if (bounds && bounds.height > 0) {
+            localYFraction = (localPoint.y - bounds.y) / bounds.height;
+          }
+          if (bounds && bounds.width > 0) {
+            localXFraction = (localPoint.x - bounds.x) / bounds.width;
+          }
+          console.log("Local Y Fraction:", localYFraction, "Local X Fraction:", localXFraction);
+
+          if (localYFraction < 0.35) {
+            // Upper 35%: Head area
+            if (localXFraction < 0.40) {
+              // Left Cheek Pinch
+              console.log("Zone: Left Cheek pinched -> Embarraased Squirm");
+              window.setEmotion("confused");
+              live2dModel.motion('Flick@Body', 0, 2);
+            } else if (localXFraction > 0.60) {
+              // Right Cheek Pinch
+              console.log("Zone: Right Cheek pinched -> Embarrassed Squirm");
+              window.setEmotion("confused");
+              live2dModel.motion('Flick@Body', 0, 2);
+            } else {
+              // Center Forehead Petting
+              console.log("Zone: Forehead Petting -> Embarrassed Blush");
+              window.setEmotion("smug");
+              live2dModel.motion('FlickUp', 0, 2);
+            }
+          } else if (localYFraction >= 0.35 && localYFraction < 0.60) {
+            // Middle 35% - 60%: Chest/Boobs area - makes her angry
+            console.log("Zone: Chest/Boobs tapped -> Triggering Angry reaction");
+            window.setEmotion("angry");
+            live2dModel.motion('Flick', 0, 2);
+          } else if (localYFraction >= 0.60 && localYFraction < 0.80) {
+            // Lower 60% - 80%: Tummy tickling
+            console.log("Zone: Tummy tickled -> Giggling");
+            window.setEmotion("smug");
+            live2dModel.motion('Tap', 0, 2);
+          } else {
+            // Lower 80%+: Lower body - default posture shrug
+            console.log("Zone: Lower Body tapped -> Triggering Shrug");
+            live2dModel.motion('Tap@Body', 0, 2);
+          }
+        });
+
+        // Setup reactive sentiment parameter variables and overrides
+        targetEyeOpenL = 1.0;
+        targetEyeOpenR = 1.0;
+        targetEyeSmileL = 0.0;
+        targetEyeSmileR = 0.0;
+        targetBrowLY = 0.0;
+        targetBrowRY = 0.0;
+        targetBrowLX = 0.0;
+        targetBrowRX = 0.0;
+        targetBrowLAngleL = 0.0;
+        targetBrowLAngleR = 0.0;
+        targetBrowLForm = 0.0;
+        targetBrowRForm = 0.0;
+        targetCheek = 0.0;
+        targetTear = 0.0;
+        targetAngleZ = 0.0;
+        targetMouthForm = 0.0;
+        targetMouthOpenScale = 1.0;
+
+        const core = live2dModel.internalModel.coreModel;
+
+        // Retrieve parameter indices once at startup for high-performance updates
+        const eyeLIdx = core.getParameterIndex('ParamEyeLOpen');
+        const eyeRIdx = core.getParameterIndex('ParamEyeROpen');
+        const browLYIdx = core.getParameterIndex('ParamBrowLY');
+        const browRYIdx = core.getParameterIndex('ParamBrowRY');
+        const browLXIdx = core.getParameterIndex('ParamBrowLX');
+        const browRXIdx = core.getParameterIndex('ParamBrowRX');
+        const angleZIdx = core.getParameterIndex('ParamAngleZ');
+        const mouthFormIdx = core.getParameterIndex('ParamMouthForm');
+        const mouthOpenIdx = core.getParameterIndex('ParamMouthOpenY');
+        
+        const angleYIdx = core.getParameterIndex('ParamAngleY');
+        const eyeballXIdx = core.getParameterIndex('ParamEyeBallX');
+        const eyeballYIdx = core.getParameterIndex('ParamEyeBallY');
+
+        let cheekIdx = -1;
+        try { cheekIdx = core.getParameterIndex('ParamCheek'); } catch(e){}
+
+        let eyeLSmileIdx = -1, eyeRSmileIdx = -1;
+        let browLAngIdx = -1, browRAngIdx = -1;
+        let browLFormIdx = -1, browRFormIdx = -1;
+        try { eyeLSmileIdx = core.getParameterIndex('ParamEyeLSmile'); } catch(e){}
+        try { eyeRSmileIdx = core.getParameterIndex('ParamEyeRSmile'); } catch(e){}
+        try { browLAngIdx = core.getParameterIndex('ParamBrowLAngle'); } catch(e){}
+        try { browRAngIdx = core.getParameterIndex('ParamBrowRAngle'); } catch(e){}
+        try { browLFormIdx = core.getParameterIndex('ParamBrowLForm'); } catch(e){}
+        try { browRFormIdx = core.getParameterIndex('ParamBrowRForm'); } catch(e){}
+
+        let lastSpeakingMotionTime = 0;
+
+        // Perform all model updates and overrides manually inside PIXI Ticker
+        // This runs after default updates but before rendering, completely preventing clobbering!
+        app.ticker.add(() => {
+          if (!live2dModel) return;
+
+          // 1. Manually update the model's active motions, animations, and physics
+          live2dModel.update(app.ticker.elapsedMS);
+
+          // 2. Periodic speaking gesture trigger
+          if (currentState === 'SPEAKING') {
+            let now = Date.now();
+            if (now - lastSpeakingMotionTime > 4000) {
+              lastSpeakingMotionTime = now;
+              if (currentEmotion !== 'angry' && currentEmotion !== 'sad' && currentEmotion !== 'bored' && currentEmotion !== 'error') {
+                let idx = Math.random() > 0.5 ? 0 : 1;
+                live2dModel.motion('Tap', idx, 2); // Gesturing hands dynamically
+              }
+            }
+          }
+
+          // 3. Core State-driven Overrides
+          let eyeballXOverride = null;
+          let eyeballYOverride = null;
+          let angleYOverride = null;
+
+          if (currentState === 'LISTENING') {
+            // Nodding vertical head movement
+            let time = Date.now() / 250;
+            angleYOverride = Math.sin(time) * 4.0; 
+          } else if (currentState === 'THINKING') {
+            // Think look: upward tilt, drift eyeballs top-left
+            angleYOverride = 6.0;
+            eyeballXOverride = -0.5;
+            eyeballYOverride = 0.5;
+          }
+
+          // 4. Interruption Startled Override
+          if (startledActive) {
+            targetEyeOpenL = 1.4;
+            targetEyeOpenR = 1.4;
+            targetEyeSmileL = 0.0;
+            targetEyeSmileR = 0.0;
+            targetBrowLY = 0.4;
+            targetBrowRY = 0.4;
+            targetBrowLX = 0.0;
+            targetBrowRX = 0.0;
+            targetBrowLAngleL = 0.0;
+            targetBrowLAngleR = 0.0;
+            targetBrowLForm = 0.0;
+            targetBrowRForm = 0.0;
+            targetMouthForm = 0.0;
+            window.setEmotion('confused');
+          } else {
+            // 5. Sentiment / Emotion Baseline Target Mapping
+            if (currentEmotion === 'sleeping') {
+              targetEyeOpenL = 0.0;
+              targetEyeOpenR = 0.0;
+              targetEyeSmileL = 0.0;
+              targetEyeSmileR = 0.0;
+            } else if (currentEmotion === 'bored') {
+              // Bored/scoffing unimpressed look: half-closed eyes, down-turned mouth, raised skeptical brow
+              targetEyeOpenL = 0.65;
+              targetEyeOpenR = 0.65;
+              targetEyeSmileL = 0.0;
+              targetEyeSmileR = 0.0;
+            } else {
+              targetEyeOpenL = 1.0;
+              targetEyeOpenR = 1.0;
+            }
+
+            if (currentEmotion === 'angry' || currentEmotion === 'error' || currentEmotion === 'overheat') {
+              targetBrowLY = -0.8;
+              targetBrowRY = -0.8;
+              targetBrowLX = -0.5;
+              targetBrowRX = 0.5;
+              targetBrowLAngleL = -0.8;
+              targetBrowLAngleR = 0.8;
+              targetBrowLForm = -0.8;
+              targetBrowRForm = -0.8;
+              targetMouthForm = -1.0;
+              targetEyeSmileL = 0.0;
+              targetEyeSmileR = 0.0;
+            } else if (currentEmotion === 'sad') {
+              targetBrowLY = 0.6;
+              targetBrowRY = 0.6;
+              targetBrowLX = 0.2;
+              targetBrowRX = -0.2;
+              targetBrowLAngleL = 0.8;
+              targetBrowLAngleR = -0.8;
+              targetBrowLForm = 0.8;
+              targetBrowRForm = 0.8;
+              targetMouthForm = -1.0;
+              targetEyeSmileL = 0.0;
+              targetEyeSmileR = 0.0;
+            } else if (currentEmotion === 'smug' || currentEmotion === 'vibing') {
+              // Arrogant Smug Smirk expression: cynical half-closed eyes, raised skeptical brows, sarcastic smirk!
+              targetEyeOpenL = 0.75;
+              targetEyeOpenR = 0.75;
+              targetEyeSmileL = 0.4;
+              targetEyeSmileR = 0.4;
+              targetBrowLY = 0.55;       // Left brow raised skeptically
+              targetBrowRY = -0.35;      // Right brow lowered skeptically
+              targetBrowLX = -0.2;
+              targetBrowRX = 0.2;
+              targetBrowLAngleL = 0.5;
+              targetBrowLAngleR = -0.5;
+              targetBrowLForm = 0.0;
+              targetBrowRForm = 0.0;
+              targetMouthForm = 0.8;      // smug smirk mouth shape
+            } else if (currentEmotion === 'confused' || currentEmotion === 'suspicious') {
+              targetBrowLY = 0.6;
+              targetBrowRY = -0.6;
+              targetBrowLX = 0.0;
+              targetBrowRX = 0.0;
+              targetBrowLAngleL = 0.5;
+              targetBrowLAngleR = -0.5;
+              targetBrowLForm = 0.0;
+              targetBrowRForm = 0.0;
+              targetMouthForm = -0.2;
+              targetEyeSmileL = 0.0;
+              targetEyeSmileR = 0.0;
+            } else if (currentEmotion === 'bored') {
+              targetBrowLY = 0.45;
+              targetBrowRY = 0.45;
+              targetBrowLX = 0.0;
+              targetBrowRX = 0.0;
+              targetBrowLAngleL = 0.3;
+              targetBrowLAngleR = -0.3;
+              targetBrowLForm = 0.3;
+              targetBrowRForm = 0.3;
+              targetMouthForm = -0.6; // scoffing frown
+              targetEyeSmileL = 0.0;
+              targetEyeSmileR = 0.0;
+            } else if (currentEmotion === 'listening') {
+              targetBrowLY = 0.25;
+              targetBrowRY = 0.25;
+              targetBrowLX = 0.0;
+              targetBrowRX = 0.0;
+              targetBrowLAngleL = 0.0;
+              targetBrowLAngleR = 0.0;
+              targetBrowLForm = 0.0;
+              targetBrowRForm = 0.0;
+              targetMouthForm = 0.1; // cold neutral mouth form
+              targetEyeSmileL = 0.0;
+              targetEyeSmileR = 0.0;
+            } else {
+              if (currentState === 'SPEAKING') {
+                // Default Rowdy Thirunelveli talking face: slightly frowning and cynical!
+                targetBrowLY = -0.35;
+                targetBrowRY = -0.35;
+                targetBrowLX = -0.2;
+                targetBrowRX = 0.2;
+                targetBrowLAngleL = -0.4;
+                targetBrowLAngleR = 0.4;
+                targetBrowLForm = -0.4;
+                targetBrowRForm = -0.4;
+                targetMouthForm = -0.3; // intense/slightly annoyed speaking shape
+                targetEyeSmileL = 0.0;
+                targetEyeSmileR = 0.0;
+              } else {
+                targetBrowLY = 0.0;
+                targetBrowRY = 0.0;
+                targetBrowLX = 0.0;
+                targetBrowRX = 0.0;
+                targetBrowLAngleL = 0.0;
+                targetBrowLAngleR = 0.0;
+                targetBrowLForm = 0.0;
+                targetBrowRForm = 0.0;
+                targetMouthForm = 0.1; // cold neutral mouth form
+                targetEyeSmileL = 0.0;
+                targetEyeSmileR = 0.0;
+              }
+            }
+          }
+
+          // 6. Vocal-Stress Eyebrow Elevation (Volume triggers emphasis brow lift)
+          let browStress = 0.0;
+          if (currentMouth > 0.65) {
+            browStress = (currentMouth - 0.65) * 0.6;
+          }
+
+          // 7. Buttery Smooth Sentiment/Parameter Blending (Linear Interpolation - Motion-Immune)
+          let blendFactor = 0.15; 
+          
+          let curZ = core.getParameterValueByIndex(angleZIdx);
+          let blendZ = curZ + (targetAngleZ - curZ) * 0.08;
+
+          // Perform smooth mathematical transitions completely independent of active motion files
+          currentRenderedBrowLY += ((targetBrowLY + browStress) - currentRenderedBrowLY) * blendFactor;
+          currentRenderedBrowRY += ((targetBrowRY + browStress) - currentRenderedBrowRY) * blendFactor;
+          currentRenderedBrowLX += (targetBrowLX - currentRenderedBrowLX) * blendFactor;
+          currentRenderedBrowRX += (targetBrowRX - currentRenderedBrowRX) * blendFactor;
+          currentRenderedMouthForm += (targetMouthForm - currentRenderedMouthForm) * 0.2;
+          
+          let targetCheekVal = (currentEmotion === 'smug' || currentEmotion === 'vibing') ? 0.8 : 0.0;
+          currentRenderedCheek += (targetCheekVal - currentRenderedCheek) * blendFactor;
+          currentRenderedEyeLSmile += (targetEyeSmileL - currentRenderedEyeLSmile) * blendFactor;
+          currentRenderedEyeRSmile += (targetEyeSmileR - currentRenderedEyeRSmile) * blendFactor;
+          currentRenderedBrowLAngleL += (targetBrowLAngleL - currentRenderedBrowLAngleL) * blendFactor;
+          currentRenderedBrowLAngleR += (targetBrowLAngleR - currentRenderedBrowLAngleR) * blendFactor;
+          currentRenderedBrowLForm += (targetBrowLForm - currentRenderedBrowLForm) * blendFactor;
+          currentRenderedBrowRForm += (targetBrowRForm - currentRenderedBrowRForm) * blendFactor;
+
+          // Force our smooth blended expression states into model parameters
+          core.setParameterValueByIndex(browLYIdx, currentRenderedBrowLY);
+          core.setParameterValueByIndex(browRYIdx, currentRenderedBrowRY);
+          core.setParameterValueByIndex(browLXIdx, currentRenderedBrowLX);
+          core.setParameterValueByIndex(browRXIdx, currentRenderedBrowRX);
+          core.setParameterValueByIndex(angleZIdx, blendZ);
+          core.setParameterValueByIndex(mouthFormIdx, currentRenderedMouthForm);
+
+          if (eyeLIdx >= 0 && eyeRIdx >= 0) {
+            if (startledActive) {
+              core.setParameterValueByIndex(eyeLIdx, 1.4);
+              core.setParameterValueByIndex(eyeRIdx, 1.4);
+            } else if (currentEmotion === 'sleeping') {
+              core.setParameterValueByIndex(eyeLIdx, 0.0);
+              core.setParameterValueByIndex(eyeRIdx, 0.0);
+            }
+            // Awake eyes blink naturally via PIXI Live2D's internal EyeBlink manager update
+          }
+
+          if (cheekIdx >= 0) {
+            core.setParameterValueByIndex(cheekIdx, currentRenderedCheek);
+          }
+          if (eyeLSmileIdx >= 0) {
+            core.setParameterValueByIndex(eyeLSmileIdx, currentRenderedEyeLSmile);
+          }
+          if (eyeRSmileIdx >= 0) {
+            core.setParameterValueByIndex(eyeRSmileIdx, currentRenderedEyeRSmile);
+          }
+          if (browLAngIdx >= 0) {
+            core.setParameterValueByIndex(browLAngIdx, currentRenderedBrowLAngleL);
+          }
+          if (browRAngIdx >= 0) {
+            core.setParameterValueByIndex(browRAngIdx, currentRenderedBrowLAngleR);
+          }
+          if (browLFormIdx >= 0) {
+            core.setParameterValueByIndex(browLFormIdx, currentRenderedBrowLForm);
+          }
+          if (browRFormIdx >= 0) {
+            core.setParameterValueByIndex(browRFormIdx, currentRenderedBrowRForm);
+          }
+
+          // 8. Apply state-based parameter overrides
+          if (angleYOverride !== null) {
+            core.setParameterValueByIndex(angleYIdx, angleYOverride);
+          }
+          if (eyeballXOverride !== null) {
+            core.setParameterValueByIndex(eyeballXIdx, eyeballXOverride);
+          }
+          if (eyeballYOverride !== null) {
+            core.setParameterValueByIndex(eyeballYIdx, eyeballYOverride);
+          }
+
+          // 9. Apply lip sync volume adjusted by Viseme Scale
+          let finalMouthOpen = currentMouth * targetMouthOpenScale;
+          if (currentState === 'LISTENING' || startledActive) {
+            finalMouthOpen = 0.0;
+          }
+          core.setParameterValueByIndex(mouthOpenIdx, finalMouthOpen);
+        });
+
+        // Trigger loading confirmation
+        console.log("Live2D companion loaded and ready.");
+      } catch (err) {
+        console.error("Failed to load Live2D model:", err);
+      }
+    }
+
+    // Speech bubble UI controller
+    const speechContainer = document.getElementById('speech-container');
+    const speechVibe = document.getElementById('speech-vibe');
+    const speechStatus = document.getElementById('speech-status');
+    const speechTextElement = document.getElementById('speech-text');
+    let speechFadeTimeout;
+    let accumulatedText = "";
+
+    // Emotion metadata helper representing she / he is working
+    const emotionMeta = {
+      idle: { label: "Idle", emoji: "💤", color: "rgba(255,255,255,0.1)", textColor: "#aaaaaa" },
+      listening: { label: "Listening", emoji: "👂", color: "rgba(0,191,255,0.35)", textColor: "#00bfff" },
+      speaking: { label: "Speaking", emoji: "🗣️", color: "rgba(255,105,180,0.35)", textColor: "#ff69b4" },
+      smug: { label: "Vibing", emoji: "😏", color: "rgba(255,165,0,0.35)", textColor: "#ffa500" },
+      angry: { label: "Aggressive Vibe", emoji: "😡", color: "rgba(255,69,0,0.35)", textColor: "#ff4500" },
+      sad: { label: "Sad Vibe", emoji: "😭", color: "rgba(30,144,255,0.35)", textColor: "#1e90ff" },
+      confused: { label: "Thinking / Shocked", emoji: "🤔", color: "rgba(186,85,211,0.35)", textColor: "#ba55d3" },
+      bored: { label: "Bored Vibe", emoji: "😑", color: "rgba(128,128,128,0.35)", textColor: "#808080" },
+      sleeping: { label: "Sleeping", emoji: "😴", color: "rgba(147,112,219,0.35)", textColor: "#9370db" },
+      searching: { label: "Web Searching", emoji: "🔍", color: "rgba(0,250,154,0.35)", textColor: "#00fa9a" },
+      scan: { label: "Browsing Web", emoji: "🌐", color: "rgba(0,255,255,0.35)", textColor: "#00ffff" }
+    };
+
+    window.updateSpeechBubbleState = function() {
+      const meta = emotionMeta[currentEmotion] || emotionMeta.idle;
+      if (currentState === 'SPEAKING' || currentState === 'THINKING') {
+        speechContainer.classList.remove('compact');
+        speechContainer.classList.add('visible');
+      } else {
+        // LISTENING or SLEEPING or idle
+        speechContainer.classList.add('compact');
+        speechContainer.classList.add('visible');
+        if (currentState === 'LISTENING') {
+          speechVibe.textContent = `👂 Listening`;
+        } else if (currentState === 'SLEEPING') {
+          speechVibe.textContent = `😴 Sleeping`;
+        } else {
+          speechVibe.textContent = `${meta.emoji} ${meta.label}`;
+        }
+      }
+    };
+
+    window.updateSpeechBubble = function(text, forceVisible = false) {
+      if (speechFadeTimeout) clearTimeout(speechFadeTimeout);
+      
+      const meta = emotionMeta[currentEmotion] || emotionMeta.speaking;
+      
+      // Clean tags from text
+      let cleaned = text.replace(/\[[A-Z]+\]/g, '').trim();
+      if (!cleaned) return;
+
+      speechTextElement.textContent = cleaned;
+      speechVibe.textContent = `${meta.emoji} ${meta.label}`;
+      
+      let statusStr = "ACTIVE";
+      if (currentState === "THINKING") {
+        statusStr = "PROCESSING...";
+        speechStatus.style.color = "#00ffff";
+      } else {
+        statusStr = currentState;
+        speechStatus.style.color = meta.textColor;
+      }
+      speechStatus.textContent = statusStr;
+
+      // Update bubble styling glow and arrow pointer based on active emotion color
+      speechContainer.style.boxShadow = `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px ${meta.color}`;
+      speechContainer.style.setProperty('--vibe-color', meta.color);
+      
+      speechContainer.classList.remove('compact'); // Expand to show text!
+      speechContainer.classList.add('visible');
+    };
+
+    // Dynamic Emotion Motion Triggering - Extended variety!
+    window.triggerEmotionMotion = function(emo) {
+      if (!live2dModel) return;
+      console.log("Triggering motion for emotion:", emo);
+
+      if (emo === 'angry' || emo === 'error' || emo === 'overheat') {
+        let grp = Math.random() > 0.5 ? 'Flick' : 'Flick@Body';
+        live2dModel.motion(grp, 0, 2);
+      } else if (emo === 'sad') {
+        live2dModel.motion('FlickDown', 0, 2);
+      } else if (emo === 'smug' || emo === 'vibing') {
+        let grp = Math.random() > 0.5 ? 'FlickUp' : 'Tap';
+        let idx = grp === 'Tap' ? (Math.random() > 0.5 ? 0 : 1) : 0;
+        live2dModel.motion(grp, idx, 2);
+      } else if (emo === 'confused' || emo === 'suspicious') {
+        live2dModel.motion('Flick@Body', 0, 2);
+      } else if (emo === 'speaking') {
+        let grp = Math.random() > 0.4 ? 'Tap' : 'Tap@Body';
+        let idx = grp === 'Tap' ? (Math.random() > 0.5 ? 0 : 1) : 0;
+        live2dModel.motion(grp, idx, 2);
+      } else if (emo === 'listening') {
+        live2dModel.motion('Tap@Body', 0, 1);
+      } else if (emo === 'scan' || emo === 'searching') {
+        let grp = Math.random() > 0.5 ? 'Flick@Body' : 'Tap';
+        let idx = grp === 'Tap' ? (Math.random() > 0.5 ? 0 : 1) : 0;
+        live2dModel.motion(grp, idx, 2);
+      }
+    };
+
+    // Real-Time Viseme Word Shapes & Punctuation Z-Angle tilt
+    window.addSpeechText = function(text) {
+      accumulatedText += text;
+      window.updateSpeechBubble(accumulatedText, true);
+
+      const t = text.toLowerCase();
+      targetMouthOpenScale = 1.0;
+      
+      if (t.includes('a') || t.includes('e') || t.includes('o')) {
+        targetMouthForm = 0.5;
+      } else if (t.includes('i') || t.includes('y')) {
+        targetMouthForm = 1.0;
+      } else if (t.includes('u') || t.includes('w')) {
+        targetMouthForm = -0.6;
+      }
+
+      if (t.includes(',') || t.includes('.') || t.includes('?') || t.includes('!')) {
+        targetAngleZ = targetAngleZ > 0 ? -4.0 : 4.0;
+      } else {
+        if (targetAngleZ === 0.0) {
+          targetAngleZ = 3.0;
+        }
+      }
+    };
+
+    // Exposed routines called from Python main.py
+    window.startTalking = function() {
+      accumulatedText = "";
+      speechTextElement.textContent = "";
+      targetMouthOpenScale = 1.0;  // L02: reset per-turn mouth scale drift
+      currentState = 'SPEAKING';
+      window.updateSpeechBubbleState();
+    };
+
+    window.stopTalking = function() {
+      currentMouth = 0.0;
+      // When done talking, collapse nicely back into compact mode listening and clear text!
+      currentState = 'LISTENING';
+      accumulatedText = "";
+      speechTextElement.textContent = "";
+      window.updateSpeechBubbleState();
+    };
+
+    window.setMouth = function(val) {
+      currentMouth = parseFloat(val);
+    };
+
+    window.setEmotion = function(emo) {
+      if (emo !== currentEmotion) {
+        currentEmotion = emo;
+        window.triggerEmotionMotion(emo);
+        window.updateSpeechBubbleState();
+        if (!speechContainer.classList.contains('compact')) {
+          window.updateSpeechBubble(accumulatedText || "...", true);
+        }
+      }
+    };
+
+    window.setState = function(state) {
+      currentState = state;
+      window.updateSpeechBubbleState();
+      
+      if (state === 'THINKING') {
+        window.setEmotion('process');
+        const meta = emotionMeta[currentEmotion] || emotionMeta.speaking;
+        speechTextElement.textContent = "Processing task / thinking...";
+        speechVibe.textContent = `${meta.emoji} Thinking`;
+        speechStatus.textContent = "PROCESSING...";
+        speechStatus.style.color = "#00ffff";
+        speechContainer.style.boxShadow = `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0,255,255,0.4)`;
+        speechContainer.style.setProperty('--vibe-color', 'rgba(0,255,255,0.4)');
+      } else if (state === 'SPEAKING' && currentEmotion === 'idle') {
+        window.triggerEmotionMotion('speaking');
+      } else if (state === 'LISTENING') {
+        if (currentEmotion !== 'angry' && currentEmotion !== 'sad' && currentEmotion !== 'bored' && currentEmotion !== 'error') {
+          window.setEmotion('listening');
+        }
+      }
+    };
+
+    window.triggerInterruption = function() {
+      startledActive = true;
+      currentMouth = 0.0;
+      accumulatedText = "💥 (Interrupted!)";
+      window.updateSpeechBubble(accumulatedText, true);
+      live2dModel.motion('Flick@Body', 0, 2);
+      if (speechFadeTimeout) clearTimeout(speechFadeTimeout);
+      speechFadeTimeout = setTimeout(() => {
+        currentState = 'LISTENING';
+        window.updateSpeechBubbleState();
+      }, 1500);
+      setTimeout(() => {
+        startledActive = false;
+      }, 1200);
+    };
+
+    // Adapt layout on window resize
+    window.addEventListener('resize', () => {
+      if (live2dModel) {
+        live2dModel.x = window.innerWidth / 2 - (live2dModel.width / 2);
+      }
+    });
+
+    // Helper to change parameters dynamically from Python (e.g. scale, y-offset)
+    window.updateLayout = function(scale, y) {
+      scaleVal = parseFloat(scale);
+      yOffset = parseInt(y);
+      if (live2dModel) {
+        live2dModel.scale.set(scaleVal);
+        live2dModel.x = window.innerWidth / 2 - (live2dModel.width / 2);
+        live2dModel.y = yOffset;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

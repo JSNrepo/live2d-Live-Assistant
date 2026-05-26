@@ -1,0 +1,27 @@
+# EditorConfig — ensures consistent formatting across all editors (M05)
+# See https://editorconfig.org
+
+root = true
+
+[*]
+indent_style = space
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.py]
+indent_size = 4
+max_line_length = 120
+
+[*.{html,js,css,json}]
+indent_size = 2
+
+[*.{toml,yml,yaml}]
+indent_size = 2
+
+[*.sh]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

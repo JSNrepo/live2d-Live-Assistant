@@ -1,0 +1,53 @@
+[voice]
+voice_name = "Zephyr"
+model = "gemini-3.1-flash-live-preview"
+pitch_factor = 1.15
+
+[session]
+allow_barge_in = true
+allow_interruptions = true
+interruption_min_duration = 0.6
+false_interruption_timeout = 0.6
+agent_state_hold_sec = 0.8
+
+[noise_gate]
+enabled = true
+min_rms = 120.0
+ratio = 2.5
+attack_frames = 2
+hold_frames = 6
+alpha = 0.95
+calibration_sec = 1.5
+
+[emotion]
+frame_sec = 0.2
+assistant_emotion_ttl_sec = 8.0
+assistant_tool_emotion_lock_sec = 2.0
+text_min_chars = 24
+text_min_sec = 0.35
+text_force_sec = 1.2
+text_buffer_limit = 400
+
+[logging]
+quiet = true
+log_file = ""
+
+[models]
+live = "gemini-3.1-flash-live-preview"
+task = "gemini-3.5-flash"
+vision = "gemini-3.5-flash"
+
+[audio]
+send_rate = 16000
+recv_rate = 24000
+chunk = 1024
+
+[persona]
+persona_file = "hyori.txt"
+
+[live2d]
+enabled = true
+width = 500
+height = 700
+scale = 0.32
+y_offset = 40

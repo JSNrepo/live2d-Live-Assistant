@@ -1,0 +1,195 @@
+{
+  "nodes": {},
+  "edges": [
+    {
+      "source": "user",
+      "relation": "routine",
+      "target": "eating, sleeping, watching tv"
+    },
+    {
+      "source": "user",
+      "relation": "previous_voice_preference",
+      "target": "cute anime voice"
+    },
+    {
+      "source": "user",
+      "relation": "current_persona_trigger",
+      "target": "remembering thirunelveli rowdy slang"
+    },
+    {
+      "source": "user",
+      "relation": "trait",
+      "target": "likes to provoke"
+    },
+    {
+      "source": "user",
+      "relation": "playing",
+      "target": "pubg mobile"
+    },
+    {
+      "source": "user",
+      "relation": "occupation",
+      "target": "being lazy and wasting time"
+    },
+    {
+      "source": "user",
+      "relation": "self_proclaimed_identity",
+      "target": "big tirunelveli rowdy"
+    },
+    {
+      "source": "user",
+      "relation": "pro_status",
+      "target": "delta force and pubg pro player"
+    },
+    {
+      "source": "user",
+      "relation": "dislikes_nickname",
+      "target": "sudaala"
+    },
+    {
+      "source": "user",
+      "relation": "is_stupid_at_terminal",
+      "target": "true"
+    },
+    {
+      "source": "user",
+      "relation": "wants_to_do",
+      "target": "original api integration"
+    },
+    {
+      "source": "user",
+      "relation": "has_upcoming_event",
+      "target": "exam"
+    },
+    {
+      "source": "user",
+      "relation": "has_opinion",
+      "target": "does not like current situation/response"
+    },
+    {
+      "source": "user",
+      "relation": "speaks",
+      "target": "spanish"
+    },
+    {
+      "source": "user",
+      "relation": "speaks",
+      "target": "german"
+    },
+    {
+      "source": "user",
+      "relation": "job",
+      "target": "mechanic"
+    },
+    {
+      "source": "user",
+      "relation": "watching",
+      "target": "disney rc toys"
+    },
+    {
+      "source": "user",
+      "relation": "name",
+      "target": "vinoth"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "playing cricket"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "coding python"
+    },
+    {
+      "source": "user",
+      "relation": "enjoys",
+      "target": "talking to the ai"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "session_rule",
+      "target": "Use separate sessions like 'music' for media or 'research' for research to isolate parallel tabs"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "stable_selector",
+      "target": "Always click/fill using semantic ref like '@e-12' from the accessibility tree"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "get_content_necessity",
+      "target": "Always call agent_webbridge_get_content after any navigate, click, or fill to see the updated page layout"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "navigation_rule",
+      "target": "Always use full protocols like 'https://www.google.com' or target site URLs when navigating"
+    },
+    {
+      "source": "user",
+      "relation": "speaks",
+      "target": "japanese"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_scroll",
+      "target": "webbridge_scroll(direction, amount, session): scroll page up/down to reveal content"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_key_press",
+      "target": "webbridge_key_press(key, session): press Enter/Escape/Tab/Arrow keys in browser"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_wait",
+      "target": "webbridge_wait(seconds): wait up to 10s for page load after navigate"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_get_page_text",
+      "target": "webbridge_get_page_text(session): extract 8000 chars visible text from page"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_evaluate_js",
+      "target": "webbridge_evaluate_js(code, session): run custom JavaScript in active browser tab"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_hover",
+      "target": "webbridge_hover(selector, session): hover element to reveal dropdowns/tooltips"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_go_back",
+      "target": "webbridge_go_back(session): browser history back navigation"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "tool_select_option",
+      "target": "webbridge_select_option(selector, value, session): select from <select> dropdown by value or text"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "total_tools",
+      "target": "13 tools: navigate, get_content, click, fill, screenshot, scroll, key_press, wait, get_page_text, evaluate_js, hover, go_back, select_option"
+    },
+    {
+      "source": "kimi_webbridge",
+      "relation": "webbridge_status_check",
+      "target": "Always check WebBridge active (port 10086) before starting run_browser_task. Fail loudly if not running."
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "terminal"
+    },
+    {
+      "source": "user's father",
+      "relation": "location",
+      "target": "chennai"
+    }
+  ]
+}
