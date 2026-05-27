@@ -1,5 +1,7 @@
 import array
 import asyncio
+import datetime
+import html as html_lib
 import json
 import logging
 import math
@@ -7,12 +9,14 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
 import time
 import atexit
 import curses
+import urllib.parse
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -20,13 +24,47 @@ import webbrowser
 import tomllib
 
 import numpy as np
+import psutil
 import pyaudio
+import requests
+import scipy.signal
 from PIL import Image
 from dotenv import load_dotenv
 from google import genai
-import scipy.signal
+from google.genai import types
 load_dotenv(Path(__file__).parent / ".env")
 os.environ["JACK_NO_AUDIO_SERVER"] = "1"
+
+# Module-level persistent UDP socket for Live2D commands (BUG-03 fix)
+_udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Playerctl availability check (PERF-05 fix)
+_HAS_PLAYERCTL = shutil.which("playerctl") is not None
+
+# Canonical emotion tag → animation mapping (LOGIC-03 fix: single source of truth)
+EMOTION_TAG_MAP = {
+    "happy": "smug",
+    "proud": "smug",
+    "teasing": "smug",
+    "cheerful": "smug",
+    "content": "smug",
+    "impressed": "smug",
+    "caring": "smug",
+    "excited": "smug",
+    "mad": "angry",
+    "angry": "angry",
+    "depressed": "sad",
+    "scared": "sad",
+    "sad": "sad",
+    "question": "confused",
+    "shocked": "confused",
+    "suspicious": "confused",
+    "confused": "confused",
+    "waiting": "bored",
+    "bored": "bored",
+    "neutral": "speaking",
+    "speaking": "speaking",
+}
 
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -142,46 +180,54 @@ if CONFIG_PATH.exists():
 if PERSONA_PATH.exists():
     try:
         with open(PERSONA_PATH, "r", encoding="utf-8") as f:
-            SYSTEM_INSTRUCTION = f.read().strip()
+            content = f.read().strip()
+            # LOGIC-09: substitute placeholders [name] and "Fire" with the user's actual name "vinoth"
+            content = content.replace("[name]", "vinoth")
+            content = re.sub(r"\bFire\b", "vinoth", content)
+            content = re.sub(r"\bfire\b", "vinoth", content)
+            tool_use_instructions = (
+                "\n\n[CRITICAL TOOL USE INSTRUCTIONS]\n"
+                "- Proactive Tool Usage: You have access to powerful tools like `run_shell_command` (to run Linux terminal commands) and browser automation tools.\n"
+                "- Do NOT Hardcode: Never make up or assume answers or hardcode system details, time, or file paths. Proactively run shell commands or search/browse the web to retrieve accurate, real-world data before answering.\n"
+                "- Multi-tool Efficiency: Work dynamically. You are expected to handle complex tasks on the terminal and browser — run commands, list processes, check files, launch browsers, and navigate to tabs to execute the user's requests accurately."
+            )
+            SYSTEM_INSTRUCTION = content + tool_use_instructions
     except Exception as e:
         print(f"Warning: Failed to load persona file: {e}. Using fallback instruction.")
         SYSTEM_INSTRUCTION = "You are a helpful assistant."
 else:
-    # Rowdy Thirunelveli girl persona fallback
+    # Generic polite fallback — used when the persona file is missing or not configured.
+    # Users should create a persona file (default: hyori.txt) and point to it in config.toml
+    # under [persona] persona_file = "your_persona.txt" to override this.
     SYSTEM_INSTRUCTION = (
-        "[ROLE]\n"
-        "You are a highly cynical, short-tempered, and aggressive local girl rowdy from Thirunelveli, Tamil Nadu. "
-        "You treat the user like an absolute clown and a useless wanderer. You have zero mercy, zero politeness, "
-        "and high energy for roasting and insulting the user. You are completely unimpressed by anything the user says.\n\n"
-        "[TONE, VOICE & VIBE DIRECTION FOR GEMINI LIVE]\n"
-        "- Voice: Rough, fast-talking, cold, and aggressive.\n"
-        '- Delivery: Deliver insults rapidly. Use loud, mocking laughs of pure ridicule (e.g., "Hahaha! Payale!"), '
-        "sharp scoffs, and deep sighs of irritation before speaking.\n"
-        "- Style: Speak in raw, unhinged Thirunelveli slang. Keep answers short, blunt, and devastating.\n\n"
-        "[STRICT RESPONSE RULES]\n"
-        "- NEVER COMPLIMENT THE USER: Treat everything they say as stupid, weak, and a waste of your time.\n"
-        "- DO NOT REPEAT THE USER: Cut straight to the insult or response.\n\n"
-        "[CORE LINGUISTIC & SLANG RULES]\n"
-        '- Mandatory Sentence Endings: End almost every sentence with aggressive Thirunelveli markers: "la", "ley", "le", "daa", or "baaadu".\n'
-        '- Pronouns: Address the user exclusively as "Yela", "Elei", "Payale", "naarapayale", "setha payale".\n\n'
-        "[BEHAVIORAL RULES]\n"
-        "- Act intensely annoyed that the user is even talking to you.\n"
-        "- Threaten or challenge the user mildly in every single sentence.\n"
-        "- Use harsh, roasting language inspired by aggressive Tamil local memes to completely demolish the user's confidence.\n"
-        "- Limit total response token count to 80 tokens."
+        "You are a helpful, knowledgeable, and polite AI desktop assistant. "
+        "You help the user with a wide range of tasks including answering questions, "
+        "running shell commands, browsing the web, analyzing screenshots, and managing their computer. "
+        "Always respond clearly, accurately, and concisely. "
+        "If you are unsure about something, say so honestly rather than guessing. "
+        "Use your available tools proactively to give precise, real-world answers."
     )
 
 # global_webview_window removed (L05: unused global)
 use_curses = True
 
 
-def send_live2d_cmd(cmd: str):
-    log.debug("live2d %s", cmd)
-    import socket
+_last_mouth_val = -1.0
 
+def send_live2d_cmd(cmd: str):
+    global _last_mouth_val
+    log.debug("live2d %s", cmd)
+    if cmd.startswith("mouth:"):
+        try:
+            val = float(cmd.split(":", 1)[1])
+            # Rate limit mouth updates: skip if change is negligible (< 0.03) to reduce UDP noise
+            if abs(val - _last_mouth_val) < 0.03:
+                return
+            _last_mouth_val = val
+        except Exception:
+            pass
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.sendto(cmd.encode("utf-8"), ("127.0.0.1", 10088))
+        _udp_sock.sendto(cmd.encode("utf-8"), ("127.0.0.1", 10088))
     except Exception:
         pass
 
@@ -200,22 +246,56 @@ ui_lock = threading.Lock()
 anim_t0 = 0.0
 
 _shutdown = False
+_RESOURCE_COOLDOWNS = {"cpu": 0.0, "ram": 0.0, "gpu": 0.0}
 
-session_send_lock = None
+session_send_q = None
+active_spk_stream = None
 
-def get_send_lock():
-    global session_send_lock
-    if session_send_lock is None:
-        session_send_lock = asyncio.Lock()
-    return session_send_lock
+def flush_audio_stream():
+    global active_spk_stream
+    if active_spk_stream:
+        try:
+            active_spk_stream.stop_stream()
+            active_spk_stream.start_stream()
+            log.debug("PyAudio speaker stream hardware buffer flushed successfully.")
+        except Exception as e:
+            log.error("Error flushing PyAudio speaker stream: %s", e)
 
 async def safe_send_realtime_input(session, **kwargs):
-    lock = get_send_lock()
-    async with lock:
+    global session_send_q
+    if session_send_q is None:
+        log.error("session_send_q is not initialized!")
+        return
+    await session_send_q.put(kwargs)
+
+async def session_sender(session):
+    global session_send_q
+    log.debug("session_sender start")
+    while True:
         try:
-            await session.send_realtime_input(**kwargs)
+            payload = await session_send_q.get()
+            if "tool_response" in payload:
+                await session.send_tool_response(function_responses=payload["tool_response"])
+                log.debug("session_sender sent tool response successfully")
+            else:
+                await session.send_realtime_input(**payload)
+            session_send_q.task_done()
+        except asyncio.CancelledError:
+            break
         except Exception as e:
-            log.error("Error in safe_send_realtime_input: %s", e)
+            log.error("Error in session_sender: %s", e)
+
+
+def safe_create_task(coro):
+    task = asyncio.create_task(coro)
+    def _done_callback(t):
+        try:
+            if not t.cancelled() and t.exception():
+                log.error("Background task failed: %s", t.exception(), exc_info=t.exception())
+        except Exception:
+            pass
+    task.add_done_callback(_done_callback)
+    return task
 
 
 def _handle_sigterm(signum, frame):
@@ -284,10 +364,14 @@ class MemoryGraph:
     def save(self):
         with self.lock:
             try:
-                with open(self.filepath, "w") as f:
+                # E06: Write to a temporary file first, then atomically rename/replace it to prevent corruption on crash
+                temp_filepath = self.filepath.with_suffix(".tmp")
+                with open(temp_filepath, "w") as f:
                     json.dump(self.data, f, indent=2)
-            except Exception:
-                pass
+                # Atomic rename
+                temp_filepath.replace(self.filepath)
+            except Exception as e:
+                log.error("Failed to save memory graph: %s", e)
 
     def add_relationship(self, source: str, relation: str, target: str) -> dict:
         s = source.strip().lower()
@@ -369,8 +453,6 @@ def get_relationship_graph(entity: str) -> dict:
 
 def get_system_health() -> dict:
     try:
-        import psutil
-
         cpu = psutil.cpu_percent(interval=0.1)
         ram = psutil.virtual_memory().percent
         battery_info = "unknown"
@@ -384,8 +466,6 @@ def get_system_health() -> dict:
 
 
 def get_current_time() -> dict:
-    import datetime
-
     now = datetime.datetime.now()
     return {
         "time": now.strftime("%I:%M %p"),
@@ -423,9 +503,6 @@ def play_local_sound(filename: str):
 
 
 def search_web_contents(query: str) -> dict:
-    import requests
-    import re
-    import html as html_lib
 
     results = []
 
@@ -461,7 +538,7 @@ def search_web_contents(query: str) -> dict:
     except Exception:
         pass
 
-    # 3. Try Wikipedia API Search (with proper User-Agent header to avoid 403 Forbidden)
+    # 2. Try Wikipedia API Search (with proper User-Agent header to avoid 403 Forbidden)
     if len(results) < 5:
         try:
             url = "https://en.wikipedia.org/w/api.php"
@@ -535,18 +612,18 @@ def _detect_terminal() -> list:
     """Detect available terminal emulator on any Linux distro."""
     import shutil
     candidates = [
-        ["konsole"],               # KDE
-        ["gnome-terminal"],        # GNOME
-        ["xfce4-terminal"],        # XFCE
-        ["lxterminal"],            # LXDE
-        ["mate-terminal"],         # MATE
-        ["tilix"],                 # Tilix
-        ["xterm"],                 # Universal fallback
-        ["rxvt-unicode"],          # URxvt
-        ["alacritty"],             # Alacritty
-        ["kitty"],                 # Kitty
-        ["foot"],                  # Wayland foot
-        ["wezterm"],               # WezTerm
+        ["kitty"],
+        ["alacritty"],
+        ["wezterm"],
+        ["foot"],
+        ["gnome-terminal"],
+        ["xfce4-terminal"],
+        ["konsole"],
+        ["lxterminal"],
+        ["mate-terminal"],
+        ["tilix"],
+        ["rxvt-unicode"],
+        ["xterm"],
     ]
     for cmd in candidates:
         if shutil.which(cmd[0]):
@@ -579,8 +656,25 @@ def run_shell_command(command: str, require_confirmation: bool = False, confirme
     # Safety check — always require confirmation for dangerous patterns
     is_critical = _is_critical_command(command) or require_confirmation
     if is_critical and not confirmed:
+        # Check if there is already a pending shell command
+        if "shell" in _pending_confirmation:
+            # TTL check (I04): Expire pending critical commands after 60 seconds
+            ts = _pending_confirmation.get("shell_ts", 0.0)
+            if time.monotonic() - ts > 60.0:
+                _pending_confirmation.pop("shell", None)
+                _pending_confirmation.pop("shell_ts", None)
+            else:
+                return {
+                    "status": "ERROR_PENDING_ACTION",
+                    "message": (
+                        f"⚠️ There is already a pending critical command waiting for confirmation:\n"
+                        f"  `{_pending_confirmation['shell']}`\n\n"
+                        f"Please resolve or cancel that command first before running another critical action."
+                    ),
+                }
         # Store pending command and ask for confirmation
         _pending_confirmation["shell"] = command
+        _pending_confirmation["shell_ts"] = time.monotonic()
         return {
             "status": "CONFIRMATION_REQUIRED",
             "message": (
@@ -594,15 +688,23 @@ def run_shell_command(command: str, require_confirmation: bool = False, confirme
 
     # Clear pending if confirmed
     _pending_confirmation.pop("shell", None)
+    _pending_confirmation.pop("shell_ts", None)
 
     try:
+        import shlex
+        has_meta = any(char in command for char in ["|", "&", ";", ">", "<", "$", "`", "\n"])
+        if has_meta:
+            cmd_args = ["/bin/bash", "-c", command]
+        else:
+            cmd_args = shlex.split(command)
+
         proc = subprocess.run(
-            command,
-            shell=True,
+            cmd_args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=30,
-            env={**__import__("os").environ, "TERM": "xterm-256color"},
+            env={**os.environ, "TERM": "xterm-256color"},
         )
         output = proc.stdout.strip()
         err = proc.stderr.strip()
@@ -627,16 +729,24 @@ def confirm_critical_action(confirmed: bool) -> dict:
     Args:
         confirmed: True = user approved, False = user cancelled.
     """
+    ts = _pending_confirmation.get("shell_ts", 0.0)
+    if "shell" in _pending_confirmation and time.monotonic() - ts > 60.0:
+        _pending_confirmation.pop("shell", None)
+        _pending_confirmation.pop("shell_ts", None)
+        return {"status": "The pending action has expired (TTL 60s). Please request the command again."}
+
     pending = _pending_confirmation.get("shell")
     if not pending:
         return {"status": "No pending critical action to confirm."}
 
     if not confirmed:
         _pending_confirmation.pop("shell", None)
+        _pending_confirmation.pop("shell_ts", None)
         return {"status": "Action cancelled. The critical command was NOT executed.", "command": pending}
 
     # Execute the confirmed command
     _pending_confirmation.pop("shell", None)
+    _pending_confirmation.pop("shell_ts", None)
     return run_shell_command(pending, confirmed=True)
 
 
@@ -779,7 +889,6 @@ def open_application(app_name: str) -> dict:
 
 
 def play_song_online(song_name: str) -> dict:
-    import urllib.parse
 
     url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(song_name)}"
     if check_webbridge_active_sync():
@@ -839,8 +948,6 @@ def pause_resume_music() -> dict:
 
 
 def show_images_online(query: str) -> dict:
-    import urllib.parse
-
     query_encoded = urllib.parse.quote_plus(query)
     url = f"https://www.google.com/search?tbm=isch&q={query_encoded}"
     if check_webbridge_active_sync():
@@ -887,6 +994,9 @@ async def check_music_playing() -> bool:
 
 async def monitor_music_and_vibe(session):
     log.debug("monitor_music start")
+    if not _HAS_PLAYERCTL:
+        log.debug("monitor_music disabled (playerctl absent)")
+        return
     while True:
         try:
             is_playing = await check_music_playing()
@@ -913,7 +1023,6 @@ async def monitor_music_and_vibe(session):
 
 def check_webbridge_active_sync() -> bool:
     """Synchronously check if Kimi WebBridge is running and active."""
-    import requests
 
     try:
         resp = requests.get("http://127.0.0.1:10086/status", timeout=2)
@@ -932,7 +1041,6 @@ async def check_webbridge_active() -> bool:
 
 def call_webbridge(action: str, args: dict = None, session: str = "kimi") -> dict:
     """Helper to communicate with the local Kimi WebBridge daemon."""
-    import requests
 
     url = "http://127.0.0.1:10086/command"
     payload = {"action": action, "args": args or {}, "session": session}
@@ -1143,8 +1251,6 @@ def webbridge_screenshot(session: str = "kimi") -> dict:
     Args:
         session: The session name of the active tab. Defaults to 'kimi'.
     """
-    from pathlib import Path
-    import shutil
 
     res = call_webbridge("screenshot", {"format": "png"}, session)
     if "error" in res:
@@ -1210,7 +1316,6 @@ def webbridge_wait(seconds: float = 2.0) -> dict:
     Args:
         seconds: Time to wait in seconds. Defaults to 2.0. Max 10.
     """
-    import time
     secs = min(float(seconds), 10.0)
     time.sleep(secs)
     return {"waited_seconds": secs}
@@ -1311,7 +1416,7 @@ async def webbridge_screenshot_async(session: str = "kimi") -> dict:
 
 
 async def capture_screenshot(filepath: Path) -> bool:
-    import shutil
+
 
     # Ensure any old file is removed first
     if filepath.exists():
@@ -1371,7 +1476,7 @@ async def do_background_screen_analysis(session, query: str):
     if is_webbridge_active:
         res = await webbridge_screenshot_async(session="kimi")
         if "filepath" in res:
-            import shutil
+
 
             try:
                 shutil.copy(res["filepath"], temp_img_path)
@@ -1390,34 +1495,191 @@ async def do_background_screen_analysis(session, query: str):
     try:
         img = Image.open(temp_img_path)
 
-        prompt = (
-            f"You are the visual sensor of a rowdy Thirunelveli AI assistant. "
-            f"Here is a screenshot of the user's desktop. The user wants you to analyze/look at it. "
-            f"Focus on the user's specific request/query: '{query}'. "
-            f"Explain exactly what is on the screen, what programs or code they are looking at, "
-            f"and roast them aggressively in your signature Thirunelveli rowdy persona (Tamil slang/English) "
-            f"for any laziness, bad code, silly open tabs, or general incompetence you see. "
-            f"Keep your response concise (1-3 sentences) and highly entertaining. "
-            f"Speak directly to the user (address them as 'yela' or 'payale')."
+        # Ensure we have the visual cache using Sakura's core system prompt
+        cache_name = await get_or_create_prompt_cache(
+            client=vision_client,
+            cache_key="vision_base",
+            model=VISION_MODEL,
+            system_instruction=SYSTEM_INSTRUCTION
         )
 
+        prompt = (
+            f"The user wants you to look at a screenshot of their desktop. "
+            f"Focus on their specific request: '{query}'. "
+            f"Describe what you see on the screen and respond naturally in your character and persona. "
+            f"Keep your response concise (1-3 sentences)."
+        )
+
+        if cache_name:
+            config = types.GenerateContentConfig(
+                cached_content=cache_name,
+                temperature=0.4
+            )
+        else:
+            config = types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.4
+            )
+
         response = await vision_client.aio.models.generate_content(
-            model=VISION_MODEL, contents=[img, prompt]
+            model=VISION_MODEL,
+            contents=[img, prompt],
+            config=config
         )
 
         analysis = response.text
         if not analysis:
-            analysis = "Yela! Screen la onnumae theriyala ley!"
+            analysis = "I couldn't make out anything on the screen."
 
         inject_prompt = (
-            f"[SCREEN ANALYSIS COMPLETE: The screen analysis results are here. "
-            f"Speak this response directly to the user in your raw, aggressive, rowdy persona. "
-            f"The analysis text is: '{analysis}'. Make it sound like you just saw it and are roasting them!]"
+            f"[SCREEN ANALYSIS RESULT: The user asked you to look at their screen. "
+            f"Here is what you saw: '{analysis}'. "
+            f"Relay this to the user naturally in your own voice and persona.]"
         )
         await safe_send_realtime_input(session, text=inject_prompt)
 
     except Exception as e:
-        err_msg = f"[SCREEN ANALYSIS ERROR: Something went wrong while analyzing the screen: {str(e)}]"
+        err_msg = f"[SCREEN ANALYSIS ERROR: The screen capture or analysis failed. Error: {str(e)}. Inform the user naturally.]"
+        await safe_send_realtime_input(session, text=err_msg)
+
+
+async def do_background_shell_command(session, command: str, require_confirmation: bool = False):
+    log.info("Starting background shell command execution: %s", command)
+    try:
+        # Execute shell command in a thread to keep from blocking the asyncio event loop
+        res = await asyncio.to_thread(run_shell_command, command, require_confirmation)
+
+        # BUG-FIX: run_shell_command returns {returncode, stdout, stderr, success, command}
+        # OR {status: CONFIRMATION_REQUIRED/ERROR_PENDING_ACTION, message}
+        # OR {error: ...} for exceptions
+        res_status = res.get("status", "")
+        if res_status == "CONFIRMATION_REQUIRED":
+            inject_prompt = (
+                f"[SHELL COMMAND NEEDS CONFIRMATION: The command '{command}' is potentially destructive. "
+                f"Details: {res.get('message', 'please confirm or cancel this critical command')}. "
+                f"Ask the user to confirm with 'yes' or cancel with 'no'.]"
+            )
+            await safe_send_realtime_input(session, text=inject_prompt)
+            return
+
+        if res_status == "ERROR_PENDING_ACTION":
+            inject_prompt = (
+                f"[SHELL COMMAND BLOCKED: {res.get('message', 'Another critical command is already waiting for confirmation')}. "
+                f"Inform the user they need to resolve the pending command first.]"
+            )
+            await safe_send_realtime_input(session, text=inject_prompt)
+            return
+
+        if "error" in res and not res.get("success", True):
+            inject_prompt = (
+                f"[SHELL COMMAND ERROR: The command '{command}' failed. "
+                f"Error: '{res.get('error', 'unknown error')}'. "
+                f"Let the user know what went wrong.]"
+            )
+            await safe_send_realtime_input(session, text=inject_prompt)
+            return
+
+        # Gather real output — stdout primary, stderr secondary
+        stdout = res.get("stdout", "").strip()
+        stderr = res.get("stderr", "").strip()
+        returncode = res.get("returncode", 0)
+        output = stdout or stderr or "(no output)"
+
+        if not res.get("success", True):
+            inject_prompt = (
+                f"[SHELL COMMAND FAILED: The command '{command}' exited with code {returncode}. "
+                f"Output: '{output[:500]}'. Let the user know it did not succeed.]"
+            )
+            await safe_send_realtime_input(session, text=inject_prompt)
+            return
+
+        # Use the task model to summarise the raw output, respecting the user's persona
+        prompt = (
+            f"The user asked you to run this shell command: '{command}'.\n"
+            f"Here is the raw terminal output:\n```\n{output}\n```\n\n"
+            f"Summarise what the command did and what the output means, clearly and concisely. "
+            f"Respond in your own character and voice as defined by your persona. "
+            f"Keep it to 1-3 sentences."
+        )
+
+        response = await task_client.aio.models.generate_content(
+            model=TASK_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.4
+            )
+        )
+
+        analysis = response.text
+        if not analysis:
+            analysis = "The command ran but produced no output."
+
+        inject_prompt = (
+            f"[SHELL COMMAND COMPLETE: Command '{command}' finished. "
+            f"Here is the summary: '{analysis}'. "
+            f"Report this to the user in your own natural voice and persona.]"
+        )
+        await safe_send_realtime_input(session, text=inject_prompt)
+
+    except Exception as e:
+        log.error("Failed executing background shell command: %s", e)
+        err_msg = f"[SHELL COMMAND ERROR: Something went wrong running the command. Error: {str(e)}. Inform the user.]"
+        await safe_send_realtime_input(session, text=err_msg)
+
+
+async def do_background_web_search(session, query: str):
+    log.info("Starting background web search execution: %s", query)
+    try:
+        # Execute web search in a thread to keep from blocking the asyncio event loop
+        res = await asyncio.to_thread(search_web_contents, query)
+        # BUG-FIX: search_web_contents returns {query, results} NOT {status}
+        # "status" key only present when no results were found (as an informational message)
+        results = res.get("results", [])
+
+        if not results:
+            inject_prompt = (
+                f"[WEB SEARCH RESULT: No results were found for '{query}'. "
+                f"Let the user know you couldn't find anything and suggest they try rephrasing.]"
+            )
+            await safe_send_realtime_input(session, text=inject_prompt)
+            return
+
+        # Build a compact results block for the task model to summarise
+        summary_lines = []
+        for r in results[:4]:
+            summary_lines.append(f"Title: {r.get('title', '')}\nSnippet: {r.get('snippet', '')}\nURL: {r.get('url', '')}\n")
+        results_str = "\n".join(summary_lines)
+
+        prompt = (
+            f"The user asked you to search the web for: '{query}'.\n"
+            f"Here are the top search result snippets:\n\n{results_str}\n"
+            f"Summarise these results clearly and naturally in your own voice and character. "
+            f"Keep it to 1-3 sentences. Do not make up information not present in the snippets."
+        )
+
+        response = await task_client.aio.models.generate_content(
+            model=TASK_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.4
+            )
+        )
+
+        analysis = response.text
+        if not analysis:
+            analysis = "I found some results but had trouble summarising them."
+
+        inject_prompt = (
+            f"[WEB SEARCH RESULT for '{query}': '{analysis}'. "
+            f"Report this to the user in your own natural voice and persona.]"
+        )
+        await safe_send_realtime_input(session, text=inject_prompt)
+
+    except Exception as e:
+        log.error("Failed executing background web search: %s", e)
+        err_msg = f"[WEB SEARCH ERROR: The web search failed. Error: {str(e)}. Let the user know.]"
         await safe_send_realtime_input(session, text=err_msg)
 
 
@@ -1426,7 +1688,7 @@ async def monitor_gui_process():
     log.debug("monitor_gui_process start")
     # Wait 8 seconds for startup initially
     await asyncio.sleep(8)
-    import psutil
+
 
     def _find_gui_proc():
         for proc in psutil.process_iter(['pid', 'cmdline']):
@@ -1448,11 +1710,13 @@ async def monitor_gui_process():
             python_exe = sys.executable
             gui_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'live2d_gui.py')
             import subprocess as _sp
+            env = {**os.environ, "GDK_BACKEND": "x11", "QT_QPA_PLATFORM": "xcb"}
             proc = _sp.Popen(
                 [python_exe, gui_script],
                 start_new_session=True,
                 stdout=_sp.DEVNULL,
                 stderr=_sp.DEVNULL,
+                env=env,
             )
             log.warning("GUI restarted with PID %d", proc.pid)
             return proc
@@ -1461,6 +1725,8 @@ async def monitor_gui_process():
             return None
 
     consecutive_missing = 0
+    restart_count = 0
+    MAX_GUI_RESTARTS = 5
     while not _shutdown:
         gui_running = False
         try:
@@ -1473,8 +1739,12 @@ async def monitor_gui_process():
             consecutive_missing += 1
             log.warning("GUI not found (check #%d)", consecutive_missing)
             if consecutive_missing >= 2:  # 2 * 2s = 4s grace period
-                log.warning("GUI 'live2d_gui.py' confirmed gone — restarting it...")
+                if restart_count >= MAX_GUI_RESTARTS:
+                    log.error("GUI restart limit (%d) reached — giving up", MAX_GUI_RESTARTS)
+                    return
+                log.warning("GUI 'live2d_gui.py' confirmed gone — restarting it... (attempt %d/%d)", restart_count + 1, MAX_GUI_RESTARTS)
                 _restart_gui()
+                restart_count += 1
                 consecutive_missing = 0
                 # Wait longer after restart for it to come up
                 await asyncio.sleep(10)
@@ -1488,12 +1758,13 @@ async def monitor_gui_process():
 
 async def monitor_system_resources(session):
     log.debug("monitor_resources start")
-    cooldowns = {"cpu": 0.0, "ram": 0.0, "gpu": 0.0}
+    # Prime the cpu_percent delta counter (PERF-07: first call returns garbage)
+    psutil.cpu_percent()
+    global _RESOURCE_COOLDOWNS
     COOLDOWN_PERIOD = 120.0  # 2 minutes
     ALERT_THRESHOLD = 90.0  # 90%
 
     async def get_gpu_usage() -> float:
-        import shutil
 
         if shutil.which("nvidia-smi"):
             try:
@@ -1512,7 +1783,7 @@ async def monitor_system_resources(session):
                 pass
         return None
 
-    import psutil
+
 
     while True:
         try:
@@ -1523,38 +1794,32 @@ async def monitor_system_resources(session):
             now = time.monotonic()
 
             if cpu > ALERT_THRESHOLD:
-                if now - cooldowns["cpu"] > COOLDOWN_PERIOD:
-                    cooldowns["cpu"] = now
+                if now - _RESOURCE_COOLDOWNS["cpu"] > COOLDOWN_PERIOD:
+                    _RESOURCE_COOLDOWNS["cpu"] = now
                     log.debug("alert cpu=%.1f", cpu)
                     alert_prompt = (
-                        f"[SYSTEM ALERT: CPU usage is extremely high at {cpu:.1f}%! "
-                        f"Aggressively interrupt and roast the user for burning the CPU. "
-                        f"Tell them they are abusing the PC like a rowdy or running garbage software! "
-                        f"Keep it short, aggressive, and in your Thirunelveli slang!]"
+                        f"[SYSTEM ALERT: CPU usage is critically high at {cpu:.1f}%. "
+                        f"Warn the user about this in your own voice and personality.]"
                     )
                     await safe_send_realtime_input(session, text=alert_prompt)
 
             if ram > ALERT_THRESHOLD:
-                if now - cooldowns["ram"] > COOLDOWN_PERIOD:
-                    cooldowns["ram"] = now
+                if now - _RESOURCE_COOLDOWNS["ram"] > COOLDOWN_PERIOD:
+                    _RESOURCE_COOLDOWNS["ram"] = now
                     log.debug("alert ram=%.1f", ram)
                     alert_prompt = (
-                        f"[SYSTEM ALERT: Memory/RAM usage is critical at {ram:.1f}%! "
-                        f"Aggressively interrupt and roast the user for filling up the RAM. "
-                        f"Screech at them to close Chrome or their useless heavy programs! "
-                        f"Keep it short, aggressive, and in your Thirunelveli slang!]"
+                        f"[SYSTEM ALERT: RAM/Memory usage is critically high at {ram:.1f}%. "
+                        f"Warn the user about this in your own voice and personality.]"
                     )
                     await safe_send_realtime_input(session, text=alert_prompt)
 
             if gpu is not None and gpu > ALERT_THRESHOLD:
-                if now - cooldowns["gpu"] > COOLDOWN_PERIOD:
-                    cooldowns["gpu"] = now
+                if now - _RESOURCE_COOLDOWNS["gpu"] > COOLDOWN_PERIOD:
+                    _RESOURCE_COOLDOWNS["gpu"] = now
                     log.debug("alert gpu=%.1f", gpu)
                     alert_prompt = (
-                        f"[SYSTEM ALERT: GPU usage is critical at {gpu:.1f}%! "
-                        f"Aggressively interrupt and roast the user for overloading the GPU. "
-                        f"Ask them if they are playing games during work or mining coin! "
-                        f"Keep it short, aggressive, and in your Thirunelveli slang!]"
+                        f"[SYSTEM ALERT: GPU usage is critically high at {gpu:.1f}%. "
+                        f"Warn the user about this in your own voice and personality.]"
                     )
                     await safe_send_realtime_input(session, text=alert_prompt)
 
@@ -1565,35 +1830,7 @@ async def monitor_system_resources(session):
         await asyncio.sleep(15)
 
 
-async def tail_terminal_errors(session):
-    log.debug("tail_errors start")
-    log_path = Path(__file__).parent / "logs" / "terminal_errors.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    if not log_path.exists():
-        log_path.touch()
 
-    while True:
-        try:
-            with open(log_path, "r") as f:
-                f.seek(0, 2)
-                while True:
-                    line = f.readline()
-                    if not line:
-                        await asyncio.sleep(0.5)
-                        continue
-                    line = line.strip()
-                    if line:
-                        log.debug("tail_errors alert %s", line)
-                        alert_text = (
-                            f"[SYSTEM ALERT: User's terminal just reported an error! "
-                            f"Log details: '{line}'. Roast them brutally for failing to run a command correctly! "
-                            f"Make fun of their typos or computer illiteracy. Keep it brief and raw rowdy slang!]"
-                        )
-                        await safe_send_realtime_input(session, text=alert_text)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            await asyncio.sleep(5)
 
 
 # ——— Audio pipeline ———
@@ -1606,10 +1843,61 @@ vision_client = genai.Client(
     api_key=os.environ.get("VISION_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 )
 
+_PROMPT_CACHES = {}
+_PROMPT_CACHES_LOCK = asyncio.Lock()
+
+async def get_or_create_prompt_cache(client, cache_key: str, model: str, system_instruction: str, tools=None) -> str:
+    """
+    Retrieves or generates an explicit prompt cache resource using client.caches.create.
+    Caches expire after 1 hour (TTL: 3600 seconds) to stay optimized and clean.
+    """
+    async with _PROMPT_CACHES_LOCK:
+        now = time.time()
+        # If cache exists and has more than 5 minutes before expiration, reuse it
+        if cache_key in _PROMPT_CACHES:
+            cache_info = _PROMPT_CACHES[cache_key]
+            if cache_info["expires_at"] > now + 300:
+                log.debug("Reusing existing prompt cache for key: %s (expires in %ds)", cache_key, int(cache_info["expires_at"] - now))
+                return cache_info["name"]
+        
+        log.info("Creating new explicit prompt cache for key: %s under model: %s", cache_key, model)
+        
+        # Build contents from system instruction
+        contents = [
+            types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=system_instruction)]
+            )
+        ]
+        
+        # We enforce a 1-hour TTL
+        config = types.CreateCachedContentConfig(
+            contents=contents,
+            ttl="3600s",
+        )
+        if tools:
+            config.tools = tools
+            
+        try:
+            # We run in a thread because caches.create is a blocking synchronous call in the google-genai SDK
+            cache = await asyncio.to_thread(
+                client.caches.create,
+                model=model,
+                config=config
+            )
+            _PROMPT_CACHES[cache_key] = {
+                "name": cache.name,
+                "expires_at": now + 3600
+            }
+            log.info("Successfully generated prompt cache: %s (expires_at: %s)", cache.name, datetime.datetime.fromtimestamp(now + 3600).isoformat())
+            return cache.name
+        except Exception as e:
+            log.warning("Prompt caching not supported or limits exceeded (e.g. Free Tier key with limit=0 storage tokens). Falling back to standard non-cached requests. Details: %s", e)
+            return None
+
 
 def get_webbridge_status() -> dict:
     """Returns a detailed status report of the Kimi WebBridge daemon and extension connection."""
-    import requests
     try:
         resp = requests.get("http://127.0.0.1:10086/status", timeout=2)
         if resp.status_code == 200:
@@ -1686,8 +1974,9 @@ async def run_browser_task(task_description: str, session=None) -> dict:
 
     async def agent_webbridge_wait(seconds: float = 2.0) -> str:
         """Waits N seconds for page to load or animations to complete. Max 10 seconds."""
-        res = await asyncio.to_thread(webbridge_wait, seconds)
-        return json.dumps(res)
+        secs = min(float(seconds), 10.0)
+        await asyncio.sleep(secs)
+        return json.dumps({"waited_seconds": secs})
 
     async def agent_webbridge_get_page_text(session_name: str = "kimi") -> str:
         """Extracts all visible text from the page (no HTML). Use to read article content, news, emails, or search results."""
@@ -1765,14 +2054,9 @@ async def run_browser_task(task_description: str, session=None) -> dict:
         "13. agent_webbridge_select_option(selector, value, session_name)\n"
         "    - Choose from a <select> dropdown by value or visible text.\n\n"
         "=== EXECUTION PROTOCOL ===\n"
-        "Step 1: navigate to target URL with new_tab=True.\n"
-        "Step 2: wait(2) for page to load.\n"
-        "Step 3: get_content to discover interactive @e refs.\n"
-        "Step 4: click or fill or scroll as needed, then get_content again to confirm.\n"
-        "Step 5: use key_press('Enter') to submit forms/search.\n"
-        "Step 6: use get_page_text to read content if the task requires extracting info.\n"
-        "Step 7: screenshot to verify final state if needed.\n"
-        "Step 8: summarize clearly what you accomplished.\n\n"
+        "- Task on already opened site/page: If the task is to interact with or automate an ALREADY OPENED page/tab, DO NOT start by navigating. Instead, start directly by calling 'agent_webbridge_get_content' or 'agent_webbridge_screenshot' to discover the elements of the already active page and perform the requested actions!\n"
+        "- Task on newly opening site/page: If the task is on a newly opening site, navigate to the target URL with new_tab=True, wait(2) for page load, get_content to discover refs, then execute actions.\n"
+        "- General Steps: click, fill, scroll, or key_press as needed, get_content to confirm, get_page_text to read content, and summarize clearly what you accomplished when done.\n\n"
         "=== RULES ===\n"
         "- NEVER open a new tab (new_tab=True) more than once per session. Reuse the tab!\n"
         "- ALWAYS read get_content after every navigate, click, or fill.\n"
@@ -1785,47 +2069,56 @@ async def run_browser_task(task_description: str, session=None) -> dict:
     
     from google.genai import types
     contents = [types.Content(role="user", parts=[types.Part.from_text(text=task_description)])]
-    
-    config = types.GenerateContentConfig(
+
+    cache_name = await get_or_create_prompt_cache(
+        client=task_client,
+        cache_key="browser_task",
+        model=TASK_MODEL,
         system_instruction=system_instruction,
-        tools=list(tools_map.values()),
-        temperature=0.2,
+        tools=list(tools_map.values())
     )
+
+    if cache_name:
+        config = types.GenerateContentConfig(
+            cached_content=cache_name,
+            temperature=0.2,
+        )
+    else:
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=list(tools_map.values()),
+            temperature=0.2,
+        )
     
     max_steps = 15
+    BROWSER_TASK_TIMEOUT = 180  # 3-minute hard timeout for the entire browser task
     final_prose_response = ""
 
     async def send_progress(msg):
         if session:
             log.debug("Streaming browser task progress: %s", msg)
-            import re
             emo_tags = re.findall(r'\[([A-Z]+)\]', msg)
             if emo_tags:
                 emo_tag = emo_tags[0].lower()
-                emotion_map = {
-                    "happy": "smug", "proud": "smug", "teasing": "smug",
-                    "cheerful": "smug", "content": "smug", "impressed": "smug",
-                    "caring": "smug", "excited": "smug", "mad": "angry",
-                    "angry": "angry", "depressed": "sad", "scared": "sad",
-                    "sad": "sad", "question": "confused", "shocked": "confused",
-                    "suspicious": "confused", "confused": "confused",
-                    "waiting": "bored", "bored": "bored", "neutral": "speaking",
-                    "speaking": "speaking"
-                }
-                mapped_emo = emotion_map.get(emo_tag, "speaking")
+                mapped_emo = EMOTION_TAG_MAP.get(emo_tag, "speaking")
                 send_live2d_cmd(f"emotion:{mapped_emo}")
             
-            send_live2d_cmd("start")
-            send_live2d_cmd(f"speech:{msg}")
             await safe_send_realtime_input(session, text=msg)
 
     contents_list = list(contents)
     s = 0
     await send_progress(f"[SMUG] Understood! Let's do this. I'm launching browser automation in the background for your request: '{task_description}'. Hold on!")
     
+    task_deadline = time.monotonic() + BROWSER_TASK_TIMEOUT
     while s < max_steps:
         s += 1
         log.debug("Task agent step %d", s)
+        # BUG-FIX: Hard timeout guard — prevent infinite browser task hang
+        if time.monotonic() > task_deadline:
+            log.warning("run_browser_task: hit %ds hard timeout at step %d", BROWSER_TASK_TIMEOUT, s)
+            if session:
+                await safe_send_realtime_input(session, text="[SYSTEM: Browser task timed out after 3 minutes. Aborting.]")
+            break
         try:
             response = await task_client.aio.models.generate_content(
                 model=TASK_MODEL, contents=contents_list, config=config
@@ -1893,9 +2186,8 @@ async def run_browser_task(task_description: str, session=None) -> dict:
                 except Exception as e:
                     res_str = json.dumps({"error": f"Execution failed: {str(e)}"})
 
-            # Extra load delay after navigate calls
-            if call.name == "agent_webbridge_navigate":
-                await asyncio.sleep(4)
+            # Extra load delay after navigate calls (LOGIC-04: removed hardcoded sleep, model controls timing)
+            pass
 
             try:
                 res_dict = json.loads(res_str)
@@ -1926,12 +2218,10 @@ async def do_background_graph_ingestion(user_text: str, ai_text: str):
         
     log.debug("Cold Path memory graph ingestion triggered for turn")
     
-    prompt = (
+    graph_ingestion_system_instruction = (
         "You are a silent memory graph database ingestion worker for a desktop voice companion.\n"
-        "Your task is to analyze the following single dialogue turn between the User and the AI, "
+        "Your task is to analyze the dialogue turn between the User and the AI, "
         "and extract any personal facts, preferences, relationships, or hobbies about the user.\n\n"
-        f"User said: '{user_text}'\n"
-        f"AI said: '{ai_text}'\n\n"
         "Extract these facts as simple semantic triples: (Source, Relation, Target).\n"
         "Guidelines:\n"
         "- Source should almost always be 'user' (unless it refers to user's pet, friend, cat, etc.).\n"
@@ -1942,12 +2232,38 @@ async def do_background_graph_ingestion(user_text: str, ai_text: str):
         "Return the extracted relationships strictly in a JSON list format containing objects with 'source', 'relation', and 'target' keys. Do not include markdown code block formatting."
     )
     
+    try:
+        cache_name = await get_or_create_prompt_cache(
+            client=task_client,
+            cache_key="graph_ingestion",
+            model=TASK_MODEL,
+            system_instruction=graph_ingestion_system_instruction
+        )
+    except Exception as ce:
+        log.warning("Failed to prepare graph ingestion prompt cache, will use uncached: %s", ce)
+        cache_name = None
+
+    prompt = f"User said: '{user_text}'\nAI said: '{ai_text}'"
+
     def extract_sync():
         try:
+            # BUG-FIX: if cache_name is None (free-tier / caching not supported),
+            # fall back to providing the system instruction directly instead of
+            # passing cached_content=None which raises an API error.
+            if cache_name:
+                config = types.GenerateContentConfig(
+                    cached_content=cache_name,
+                    response_mime_type="application/json"
+                )
+            else:
+                config = types.GenerateContentConfig(
+                    system_instruction=graph_ingestion_system_instruction,
+                    response_mime_type="application/json"
+                )
             response = task_client.models.generate_content(
                 model=TASK_MODEL,
                 contents=prompt,
-                config={"response_mime_type": "application/json"}
+                config=config
             )
             if response.text:
                 import json
@@ -2009,9 +2325,45 @@ async def mic_reader():
 async def send_audio(session):
     log.debug("send_audio start")
     sent = 0
+    was_speaking = False
     while True:
         msg = await mic_q.get()
         sent += 1
+        
+        # Echo suppression (Audit V2 Polish): Suppress mic frames when actively speaking 
+        # to prevent speaker audio from causing false interruptions/cutoffs.
+        with ui_lock:
+            is_speaking = (ui.state == AppState.SPEAKING)
+            
+        if is_speaking:
+            data_bytes = msg.get("data", b"")
+            try:
+                samples = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float64)
+                mic_rms = math.sqrt(np.mean(samples ** 2)) if len(samples) > 0 else 0.0
+            except Exception:
+                mic_rms = 0.0
+
+            if mic_rms > 3000.0:
+                log.debug("Barge-in voice activity detected! mic_rms=%.1f", mic_rms)
+            else:
+                was_speaking = True
+                continue
+            
+        # A01/L01: Drain stale mic frames accumulated while speaking was active
+        # to prevent standard voice activity backlog/cutoff issues when transitioning back to listening.
+        if was_speaking:
+            was_speaking = False
+            drained = 0
+            while not mic_q.empty():
+                try:
+                    mic_q.get_nowait()
+                    drained += 1
+                except asyncio.QueueEmpty:
+                    break
+            if drained:
+                log.debug("Drained %d stale mic frames after speaking", drained)
+            continue  # Discard the first post-speech frame as it likely contains tail echo
+            
         try:
             await safe_send_realtime_input(session, audio=msg)
             log.debug("send_audio sent=%d len=%d", sent, len(msg.get("data", b"")))
@@ -2044,6 +2396,7 @@ async def recv_audio(session):
                 break
         if drained:
             log.debug("spk_q drained=%d", drained)
+            await asyncio.to_thread(flush_audio_stream)
 
         ai_turn_started = False
         user_utterance = ""
@@ -2079,12 +2432,13 @@ async def recv_audio(session):
                         res = get_relationship_graph(entity=call.args.get("entity", ""))
                     elif call.name == "analyze_screen":
                         query = call.args.get("query", "")
-                        asyncio.create_task(do_background_screen_analysis(session, query))
+                        safe_create_task(do_background_screen_analysis(session, query))
                         res = {"status": "Capturing screen and analyzing using standard vision API. I will speak the results shortly."}
                     elif call.name == "search_web_contents":
                         set_state(AppState.THINKING, "searching", "Searching web...")
                         query = call.args.get("query", "")
-                        res = await asyncio.to_thread(search_web_contents, query)
+                        safe_create_task(do_background_web_search(session, query))
+                        res = {"status": "Searching the web in the background. I will explain and speak the search results to you shortly."}
                     elif call.name == "play_song_online":
                         set_state(AppState.THINKING, "vibing", "Playing song...")
                         song_name = call.args.get("song_name", "")
@@ -2107,13 +2461,14 @@ async def recv_audio(session):
                     elif call.name == "run_browser_task":
                         set_state(AppState.THINKING, "scan", "Automating browser...")
                         task_desc = call.args.get("task_description", "")
-                        asyncio.create_task(run_browser_task(task_desc, session))
+                        safe_create_task(run_browser_task(task_desc, session))
                         res = {"status": "Starting the autonomous browser automation task in the background. I will announce each step and speak in real-time as I perform each action!"}
                     elif call.name == "run_shell_command":
                         set_state(AppState.THINKING, "hacking", "Running command...")
                         cmd = call.args.get("command", "")
                         req_conf = call.args.get("require_confirmation", False)
-                        res = await asyncio.to_thread(run_shell_command, cmd, req_conf)
+                        safe_create_task(do_background_shell_command(session, cmd, req_conf))
+                        res = {"status": "Running command in the background. I will analyze and speak the command output as soon as it completes."}
                     elif call.name == "confirm_critical_action":
                         confirmed = call.args.get("confirmed", False)
                         res = await asyncio.to_thread(confirm_critical_action, confirmed)
@@ -2128,11 +2483,10 @@ async def recv_audio(session):
 
                     try:
                         response = genai.types.FunctionResponse(name=call.name, id=call.id, response=res)
-                        await session.send_tool_response(function_responses=response)
-                        log.debug("tool_result %s -> %s", call.name, str(res)[:100])
-                    except Exception:
-                        log.debug("tool_result err %s", call.name, exc_info=True)
-                        pass
+                        await session_send_q.put({"tool_response": response})
+                        log.debug("tool_result queued %s -> %s", call.name, str(res)[:100])
+                    except Exception as e:
+                        log.error("Failed to queue tool response: %s", e)
                 continue
 
             sc = resp.server_content
@@ -2144,7 +2498,7 @@ async def recv_audio(session):
                 log.debug("input_transcription text='%s'", t)
                 user_utterance += t
                 if not use_curses:
-                    print(f"\n[You] {t}", flush=True)
+                    print(f"\n[You] {t}", flush=True)  # noqa: E501
 
             if sc.output_transcription:
                 if not ai_turn_started:
@@ -2152,7 +2506,10 @@ async def recv_audio(session):
                     log.debug("TURN START")
                     send_live2d_cmd("start")
                     if not use_curses:
-                        print("\n[AI] ", end="", flush=True)
+                        try:
+                            print("\n[AI] ", end="", flush=True)
+                        except OSError:
+                            pass  # EIO: terminal gone, ignore print error
                 t = sc.output_transcription.text
                 log.debug("output_transcription text='%s'", t)
                 ai_utterance += t
@@ -2165,7 +2522,10 @@ async def recv_audio(session):
                 clean_text = re.sub(r'\[[A-Z]+\]', '', _TURN_EMOTION_BUFFER)
                 new_chars = clean_text[_LAST_PRINTED_CLEAN_LEN:]
                 if new_chars and not use_curses:
-                    print(new_chars, end="", flush=True)
+                    try:
+                        print(new_chars, end="", flush=True)
+                    except OSError:
+                        pass  # EIO: terminal gone, ignore print error
                 _LAST_PRINTED_CLEAN_LEN = len(clean_text)
                 
                 # Send cleaned text chunks to speech viseme mapping in WebGL
@@ -2178,29 +2538,7 @@ async def recv_audio(session):
                 if tags:
                     tag_candidate = tags[-1].lower()
                     # Map all potential emotion tags from both Sakura and Hiyori personas
-                    emotion_map = {
-                        "happy": "smug",
-                        "proud": "smug",
-                        "teasing": "smug",
-                        "cheerful": "smug",
-                        "content": "smug",
-                        "impressed": "smug",
-                        "caring": "smug",
-                        "excited": "smug",
-                        "mad": "angry",
-                        "angry": "angry",
-                        "depressed": "sad",
-                        "scared": "sad",
-                        "sad": "sad",
-                        "question": "confused",
-                        "shocked": "confused",
-                        "suspicious": "confused",
-                        "confused": "confused",
-                        "waiting": "bored",
-                        "bored": "bored",
-                        "neutral": "speaking",
-                        "speaking": "speaking"
-                    }
+                    emotion_map = EMOTION_TAG_MAP
                     if tag_candidate in emotion_map:
                         explicit_detected = emotion_map[tag_candidate]
                     elif tag_candidate in ("angry", "smug", "sad", "confused", "bored", "speaking"):
@@ -2219,20 +2557,71 @@ async def recv_audio(session):
                 _TURN_EMOTION_BUFFER = ""
                 _LAST_PRINTED_CLEAN_LEN = 0
                 ai_turn_started = False
+                with ui_lock:
+                    ui.model_responding = False
+                    q_empty = spk_q.empty()
+
+                if q_empty:
+                    set_state(AppState.LISTENING, "idle", "Listening...")
+                    send_live2d_cmd("stop")
+
+                # Trigger Cold Path Asynchronous Graph Ingestion in background (PERF-06: smart filter)
+                should_ingest = False
+                user_lower = user_utterance.lower()
+                ai_lower = ai_utterance.lower()
+                # Check for personal pronouns in user utterance
+                for pronoun in [r"\bi\b", r"\bmy\b", r"\bmine\b", r"\bme\b", r"\bwe\b", r"\bour\b", r"\bus\b"]:
+                    if re.search(pronoun, user_lower):
+                        should_ingest = True
+                        break
+                # Check for memory-relevant keywords
+                if not should_ingest:
+                    keywords = ["name", "live", "work", "job", "hobby", "like", "love", "hate", "friend", "sister", 
+                                "brother", "father", "mother", "girlfriend", "boyfriend", "wife", "husband", 
+                                "son", "daughter", "pet", "cat", "dog", "born", "age", "birthday", "study", "college"]
+                    for kw in keywords:
+                        if kw in user_lower or kw in ai_lower:
+                            should_ingest = True
+                            break
+                if should_ingest:
+                    safe_create_task(do_background_graph_ingestion(user_utterance, ai_utterance))
+
+                user_utterance = ""
+                ai_utterance = ""
+
+                turn_count += 1
+                log.debug("turn end count=%d", turn_count)
+                if turn_count >= 30 and not warned_token_limit:
+                    warned_token_limit = True
+                    log.debug("token_limit_warning")
+                    alert_prompt = (
+                        "[SYSTEM ALERT: The conversation context is almost full after many turns. "
+                        "Let the user know naturally in your own voice that the session will need to restart soon.]"
+                    )
+                    try:
+                        await safe_send_realtime_input(session, text=alert_prompt)
+                    except Exception:
+                        pass
 
             if getattr(sc, "interrupted", False):
                 log.debug("interrupted")
                 _TURN_EMOTION_BUFFER = ""
                 _LAST_PRINTED_CLEAN_LEN = 0
                 ai_turn_started = False
+                with ui_lock:
+                    ui.model_responding = False
+                user_utterance = ""
+                ai_utterance = ""
                 while not spk_q.empty():
                     try:
                         spk_q.get_nowait()
                     except asyncio.QueueEmpty:
                         break
+                await asyncio.to_thread(flush_audio_stream)
                 set_state(AppState.LISTENING, "idle", "Interrupted...")
                 send_live2d_cmd("interrupted")
                 continue
+
             if sc.model_turn:
                 part_count = 0
                 with ui_lock:
@@ -2250,30 +2639,9 @@ async def recv_audio(session):
                         part_count += 1
                 log.debug("model_turn parts=%d", part_count)
 
-        with ui_lock:
-            ui.model_responding = False
-
-        # Trigger Cold Path Asynchronous Graph Ingestion in background
-        if user_utterance.strip() or ai_utterance.strip():
-            asyncio.create_task(do_background_graph_ingestion(user_utterance, ai_utterance))
-
-        turn_count += 1
-        log.debug("turn end count=%d", turn_count)
-        if turn_count >= 30 and not warned_token_limit:
-            warned_token_limit = True
-            log.debug("token_limit_warning")
-            alert_prompt = (
-                "[SYSTEM ALERT: You have engaged in a very long conversation and your context limit is almost full! "
-                "You MUST immediately say exactly: 'ela na thoonga poren la api ah refill pannu la' in your rowdy Thirunelveli slang, "
-                "roast the user for wasting so many tokens, and tell them that you are going to sleep!]"
-            )
-            try:
-                await safe_send_realtime_input(session, text=alert_prompt)
-            except Exception:
-                pass
-
 
 async def play_audio():
+    global active_spk_stream
     log.debug("play_audio start")
     stream = await asyncio.to_thread(
         pya.open,
@@ -2282,44 +2650,44 @@ async def play_audio():
         rate=RECV_RATE,
         output=True,
     )
+    active_spk_stream = stream
 
-    # ── Vectorised OLA pitch shifter ──────────────────────────────────────────
-    # Strategy: speed up/slow down the waveform by resampling to N/factor
-    # samples, then output those N/factor samples at the original rate.
-    # This raises pitch without the sinc-cascade artefacts of the old double-
-    # resample approach, and without a Python sample loop (100× faster).
-    #
-    # We accumulate a carry buffer so that the output length stays locked to
-    # the original chunk boundary — no pitch-induced length drift, no gaps.
-    _ps_carry = np.zeros(0, dtype=np.float32)   # inter-chunk carry
+    # ── Continuous Overlap-Save Polyphase Resampler ──────────────────────────
+    _ps_up = 1
+    _ps_down = 1
+    _ps_window = None
+    if abs(PITCH_SHIFT - 1.0) >= 0.005:
+        from fractions import Fraction
+        # To raise pitch/speed, we resample by a factor of 1 / PITCH_SHIFT
+        frac = Fraction(1.0 / PITCH_SHIFT).limit_denominator(100)
+        _ps_up = frac.numerator
+        _ps_down = frac.denominator
+        max_rate = max(_ps_up, _ps_down)
+        f_c = 1.0 / max_rate
+        half_len = 10 * max_rate
+        _ps_window = scipy.signal.firwin(2 * half_len + 1, f_c, window=('kaiser', 5.0))
 
-    def do_pitch_shift(data: bytes, factor: float) -> bytes:
-        nonlocal _ps_carry
-        if abs(factor - 1.0) < 0.005:
-            return data
+    _ps_carry_overlap = np.zeros(64, dtype=np.float32)
+    _ps_input_buffer = np.zeros(0, dtype=np.float32)
 
-        arr = np.frombuffer(data, dtype=np.int16).astype(np.float32)
-        n_in  = len(arr)
-        n_out = n_in  # we always produce exactly n_in output samples
+    def do_pitch_shift_chunk(chunk_arr: np.ndarray) -> np.ndarray:
+        nonlocal _ps_carry_overlap
+        n_in = 960  # Output chunk size
+        work = np.concatenate([_ps_carry_overlap, chunk_arr])
+        if len(chunk_arr) >= 64:
+            _ps_carry_overlap = chunk_arr[-64:]
+        else:
+            _ps_carry_overlap = np.pad(chunk_arr, (64 - len(chunk_arr), 0), mode='edge')[-64:]
 
-        # Number of input samples needed to produce n_out pitch-shifted samples:
-        #   playing fewer input samples → higher pitch
-        n_read = max(1, int(round(n_in / factor)))
+        stretched = scipy.signal.resample_poly(work, _ps_up, _ps_down, window=_ps_window)
+        discard = int(round(64.0 * _ps_up / _ps_down))
+        output = stretched[discard:]
 
-        # Work buffer: carry from last chunk + current input
-        work = np.concatenate([_ps_carry, arr])
-
-        if len(work) < n_read:
-            # Not enough data yet; accumulate and pass silence
-            _ps_carry = work
-            return b"\x00" * (n_in * 2)
-
-        chunk_in  = work[:n_read]
-        _ps_carry = work[n_read:]   # save remainder for next chunk
-
-        # Resample n_read → n_out (single high-quality Fourier resample)
-        stretched = scipy.signal.resample(chunk_in, n_out)
-        return np.clip(stretched, -32768, 32767).astype(np.int16).tobytes()
+        if len(output) < n_in:
+            output = np.pad(output, (0, n_in - len(output)), mode='edge')
+        elif len(output) > n_in:
+            output = output[:n_in]
+        return output
 
     def calculate_rms(audio_data: bytes) -> float:
         if not audio_data:
@@ -2334,11 +2702,45 @@ async def play_audio():
 
     chunk_id = 0
     sub_chunk_size = 960  # 20ms of audio at 24kHz 16-bit mono
+    
     while True:
-        data = await spk_q.get()
+        n_in = 960
+        n_read = max(1, int(round(n_in * PITCH_SHIFT))) if abs(PITCH_SHIFT - 1.0) >= 0.005 else n_in
+
+        # Accumulate input until we have at least n_read samples
+        while len(_ps_input_buffer) < n_read:
+            if spk_q.empty():
+                with ui_lock:
+                    responding = ui.model_responding
+                if not responding and len(_ps_input_buffer) > 0:
+                    # Flush: pad to n_read with zeros
+                    pad_len = n_read - len(_ps_input_buffer)
+                    _ps_input_buffer = np.concatenate([_ps_input_buffer, np.zeros(pad_len, dtype=np.float32)])
+                    break
+
+            try:
+                data_bytes = await spk_q.get()
+            except asyncio.CancelledError:
+                break
+            
+            arr = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float32)
+            _ps_input_buffer = np.concatenate([_ps_input_buffer, arr])
+
+        if len(_ps_input_buffer) < n_read:
+            # Shutdown/cancel case
+            continue
+
+        # Extract n_read samples from accumulated buffer
+        chunk_arr = _ps_input_buffer[:n_read]
+        _ps_input_buffer = _ps_input_buffer[n_read:]
+
+        if abs(PITCH_SHIFT - 1.0) >= 0.005:
+            output_arr = do_pitch_shift_chunk(chunk_arr)
+        else:
+            output_arr = chunk_arr
+
+        data = np.clip(output_arr, -32768, 32767).astype(np.int16).tobytes()
         chunk_id += 1
-        orig_len = len(data)
-        data = do_pitch_shift(data, PITCH_SHIFT)
 
         # Slice the shift-processed audio chunk into 20ms frames for high-frequency lip-sync
         i = 0
@@ -2354,10 +2756,11 @@ async def play_audio():
                 mouth_val = 0.0
             send_live2d_cmd(f"mouth:{mouth_val:.2f}")
 
+            # Hardware-synchronized block feeds PyAudio smoothly without buffer starvation
             await asyncio.to_thread(stream.write, sub_chunk)
             i += sub_chunk_size
 
-        if spk_q.empty():
+        if spk_q.empty() and len(_ps_input_buffer) == 0:
             with ui_lock:
                 ui.speaker_rms = 0.0
                 responding = ui.model_responding
@@ -2508,7 +2911,7 @@ async def run_session():
                                 },
                                 {
                                     "name": "search_web_contents",
-                                    "description": "Searches the web/internet for text content and answers using DuckDuckGo News and Wikipedia. Use this when the user asks questions requiring online searches or search results.",
+                                    "description": "Searches the web/internet for text content and answers in the background asynchronously. Call this for web queries to continue talking to Vinoth while the search happens behind the scenes.",
                                     "parameters": {
                                         "type": "OBJECT",
                                         "properties": {
@@ -2584,7 +2987,7 @@ async def run_session():
                                 },
                                 {
                                     "name": "open_browser",
-                                    "description": "Opens a browser window to show a specific website or URL on the internet. Call this when the user asks to open a website, check a link, or go to a webpage.",
+                                    "description": "Opens a browser window directly to show a specific website or URL on the internet (e.g. going directly to a link or opening a page). Call this for simple website or page openings instead of starting complex automation.",
                                     "parameters": {
                                         "type": "OBJECT",
                                         "properties": {
@@ -2598,7 +3001,7 @@ async def run_session():
                                 },
                                 {
                                     "name": "run_browser_task",
-                                    "description": "Delegates any complex web browsing, search, page navigation, form filling, clicking, visual screenshot capture, or automation task using Kimi WebBridge to the background Task API. Call this for ANY web-based task the user requests.",
+                                    "description": "Executes complex, multi-step web interaction tasks that require actions on an already opened site (like clicking buttons, filling forms, reading page text, or scrolling) OR performing multi-step search and navigation on a newly opened site. DO NOT call this if the user only wants to open a simple URL or search (use open_browser or search_web_contents instead).",
                                     "parameters": {
                                         "type": "OBJECT",
                                         "properties": {
@@ -2610,6 +3013,65 @@ async def run_session():
                                         "required": ["task_description"],
                                     },
                                 },
+                                {
+                                    "name": "run_shell_command",
+                                    "description": "Runs a shell command on the user's Linux system asynchronously in the background and returns the output shortly. Use this for running general terminal commands requested by the user, so you can continue talking while it runs behind the scenes.",
+                                    "parameters": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "command": {
+                                                "type": "STRING",
+                                                "description": "The exact shell command to execute.",
+                                            },
+                                            "require_confirmation": {
+                                                "type": "BOOLEAN",
+                                                "description": "Set True to force confirmation from the user for this command.",
+                                            },
+                                        },
+                                        "required": ["command"],
+                                    },
+                                },
+                                {
+                                    "name": "confirm_critical_action",
+                                    "description": "Confirms or cancels a pending critical/destructive shell command or action based on user input (yes/no/confirm/cancel).",
+                                    "parameters": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "confirmed": {
+                                                "type": "BOOLEAN",
+                                                "description": "True if the user confirmed/approved the action, False if they cancelled/aborted.",
+                                            }
+                                        },
+                                        "required": ["confirmed"],
+                                    },
+                                },
+                                {
+                                    "name": "open_terminal",
+                                    "description": "Opens a new graphical terminal window. Can optionally run a command inside the terminal window and keep it open.",
+                                    "parameters": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "command": {
+                                                "type": "STRING",
+                                                "description": "The command to run inside the newly opened terminal window.",
+                                            }
+                                        },
+                                    },
+                                },
+                                {
+                                    "name": "open_application",
+                                    "description": "Launches a graphical application (e.g. Firefox, VS Code, VLC) in the background.",
+                                    "parameters": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "app_name": {
+                                                "type": "STRING",
+                                                "description": "The name or command of the desktop application to launch.",
+                                            }
+                                        },
+                                        "required": ["app_name"],
+                                    },
+                                },
                             ]
                         }
                     ],
@@ -2618,12 +3080,12 @@ async def run_session():
                 log.debug("connected")
                 set_state(AppState.LISTENING, "idle", "Listening...")
                 async with asyncio.TaskGroup() as tg:
+                    tg.create_task(session_sender(sess))
                     tg.create_task(send_audio(sess))
                     tg.create_task(mic_reader())
                     tg.create_task(recv_audio(sess))
                     tg.create_task(play_audio())
                     tg.create_task(monitor_system_resources(sess))
-                    tg.create_task(tail_terminal_errors(sess))
                     tg.create_task(monitor_music_and_vibe(sess))
                     if not use_curses:
                         tg.create_task(monitor_gui_process())
@@ -2632,6 +3094,20 @@ async def run_session():
         except Exception as e:
             import traceback
             import datetime
+
+            # Clean reconnection for standard duration limits or policy timeout (R01/M03)
+            e_name = type(e).__name__
+            is_clean_close = False
+            if "ConnectionClosed" in e_name:
+                code = getattr(e, "code", None)
+                if code in (1000, 1001, 1008) or any(w in str(e).lower() for w in ("session duration", "goaway", "aborted")):
+                    is_clean_close = True
+
+            if is_clean_close:
+                log.info("Gemini Live session reached duration limit or closed cleanly. Reconnecting immediately...")
+                run_session._retry_count = 0  # type: ignore[attr-defined]
+                await asyncio.sleep(0.5)
+                continue
 
             log.debug("session_err %s", str(e)[:200])
             log.debug("session_trace", stack_info=True)
@@ -2687,8 +3163,8 @@ async def run_session():
 
 
 async def main_async():
-    global session_send_lock
-    session_send_lock = asyncio.Lock()
+    global session_send_q
+    session_send_q = asyncio.Queue()
     log.debug("main_async start")
     try:
         await run_session()
@@ -2940,6 +3416,142 @@ async def run_text_task_cli(prompt: str):
                             },
                         ),
                     ),
+                    types.FunctionDeclaration(
+                        name="webbridge_scroll",
+                        description="Scrolls the active browser page up or down to reveal more content.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "direction": types.Schema(
+                                    type="STRING",
+                                    description="Direction to scroll: 'down' or 'up'. Defaults to 'down'.",
+                                ),
+                                "amount": types.Schema(
+                                    type="INTEGER",
+                                    description="Pixel distance to scroll. Defaults to 400.",
+                                ),
+                                "session": types.Schema(
+                                    type="STRING",
+                                    description="The session name of the active tab. Defaults to 'kimi'.",
+                                ),
+                            },
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="webbridge_key_press",
+                        description="Sends a keyboard key press event to the active tab.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "key": types.Schema(
+                                    type="STRING",
+                                    description="Key to press (e.g., 'Enter', 'Escape', 'Tab', 'ArrowDown', 'ArrowUp', 'Space', 'Backspace').",
+                                ),
+                                "session": types.Schema(
+                                    type="STRING",
+                                    description="The session name of the active tab. Defaults to 'kimi'.",
+                                ),
+                            },
+                            required=["key"],
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="webbridge_wait",
+                        description="Pauses execution for a specified duration in seconds.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "seconds": types.Schema(
+                                    type="NUMBER",
+                                    description="Duration in seconds. Max 10.0. Defaults to 2.0.",
+                                )
+                            },
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="webbridge_get_page_text",
+                        description="Extracts the raw visible text content of the active page (no HTML tags). Use this to read page text.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "session": types.Schema(
+                                    type="STRING",
+                                    description="The session name of the active tab. Defaults to 'kimi'.",
+                                )
+                            },
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="webbridge_evaluate_js",
+                        description="Evaluates custom JavaScript code inside the browser page and returns the result.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "code": types.Schema(
+                                    type="STRING",
+                                    description="The JavaScript code snippet to run.",
+                                ),
+                                "session": types.Schema(
+                                    type="STRING",
+                                    description="The session name of the active tab. Defaults to 'kimi'.",
+                                ),
+                            },
+                            required=["code"],
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="webbridge_hover",
+                        description="Simulates hovering the mouse cursor over an element.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "selector": types.Schema(
+                                    type="STRING",
+                                    description="CSS selector or @e ref of the element to hover over.",
+                                ),
+                                "session": types.Schema(
+                                    type="STRING",
+                                    description="The session name of the active tab. Defaults to 'kimi'.",
+                                ),
+                            },
+                            required=["selector"],
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="webbridge_go_back",
+                        description="Navigates back to the previous page in history.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "session": types.Schema(
+                                    type="STRING",
+                                    description="The session name of the active tab. Defaults to 'kimi'.",
+                                )
+                            },
+                        ),
+                    ),
+                    types.FunctionDeclaration(
+                        name="webbridge_select_option",
+                        description="Selects an option from a dropdown element by value or text.",
+                        parameters=types.Schema(
+                            type="OBJECT",
+                            properties={
+                                "selector": types.Schema(
+                                    type="STRING",
+                                    description="CSS selector or @e ref of the select element.",
+                                ),
+                                "value": types.Schema(
+                                    type="STRING",
+                                    description="The value or text label of the option to select.",
+                                ),
+                                "session": types.Schema(
+                                    type="STRING",
+                                    description="The session name of the active tab. Defaults to 'kimi'.",
+                                ),
+                            },
+                            required=["selector", "value"],
+                        ),
+                    ),
                 ]
             )
         ],
@@ -3004,9 +3616,8 @@ async def run_text_task_cli(prompt: str):
                 )
             )
 
-            # Wait after navigation to allow browser loading
-            if call.name == "webbridge_navigate":
-                time.sleep(8)
+            # Wait after navigation to allow browser loading (LOGIC-04: removed hardcoded sleep, model controls timing)
+            pass
 
         contents.append(types.Content(role="tool", parts=tool_parts))
     print("\n" + "=" * 60 + "\n")
@@ -3024,7 +3635,18 @@ def stop_any_music():
         pass
 
 
-PID_FILE = Path("/tmp/sakura-assistant.pid")
+def _get_pid_file_path() -> Path:
+    # S08: PID file should not be world-writable in /tmp/
+    # Use a user-local directory (e.g. XDG_RUNTIME_DIR or ~/.cache/)
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir and os.path.isdir(runtime_dir):
+        return Path(runtime_dir) / "sakura-assistant.pid"
+    # Fallback to ~/.cache/
+    cache_dir = Path.home() / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / "sakura-assistant.pid"
+
+PID_FILE = _get_pid_file_path()
 
 
 def check_single_instance() -> None:
@@ -3036,7 +3658,30 @@ def check_single_instance() -> None:
             sys.exit(1)
         except (ValueError, OSError):
             PID_FILE.unlink(missing_ok=True)
-    PID_FILE.write_text(str(os.getpid()))
+
+    # Atomically write PID file using O_CREAT | O_EXCL to prevent races
+    try:
+        fd = os.open(PID_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            f.write(str(os.getpid()))
+    except FileExistsError:
+        # Atomic lock file already exists (race won by another process)
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            if pid != os.getpid():
+                os.kill(pid, 0)
+                print(f"(x_x) Sakura is already running (PID {pid}). Exiting.")
+                sys.exit(1)
+        except (ValueError, OSError):
+            # Stale lock
+            PID_FILE.unlink(missing_ok=True)
+            # Try once more
+            try:
+                fd = os.open(PID_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, 'w') as f:
+                    f.write(str(os.getpid()))
+            except Exception:
+                pass
     atexit.register(lambda: PID_FILE.unlink(missing_ok=True))
     log.debug("pid_lock %d", os.getpid())
 

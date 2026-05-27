@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 import os
+# Force XWayland (X11 compatibility layer) — works correctly on both
+# pure X11 and Wayland+XWayland sessions with pywebview.
+os.environ["GDK_BACKEND"] = "x11"
+os.environ["QT_QPA_PLATFORM"] = "xcb"
 import sys
 import socket
 import threading
@@ -21,9 +25,7 @@ def _setup_webview_backend():
         )
         if qt_available:
             os.environ["PYWEBVIEW_GUI"] = "qt"
-            # Only force XCB when on X11; on Wayland let Qt auto-detect
-            if not wayland:
-                os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+            os.environ["QT_QPA_PLATFORM"] = "xcb"  # Always use XCB via XWayland
             return "qt"
     except Exception:
         pass

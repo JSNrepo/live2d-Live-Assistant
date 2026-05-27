@@ -4,3 +4,6 @@ __pycache__/
 logs/
 *.pyc
 sounds/
+memory_graph.json
+ddg_test.html
+google_mobile.html

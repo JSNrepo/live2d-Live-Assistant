@@ -49,6 +49,11 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    #speech-container::-webkit-scrollbar {
+      display: none;
     }
     #speech-container.visible {
       opacity: 1;

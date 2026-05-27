@@ -1,0 +1,12 @@
+# Pinned dependencies for LivePythonGemini / Sakura Assistant
+google-genai==2.4.0
+PyAudio==0.2.14
+numpy==2.4.5
+scipy==1.17.1
+psutil==7.2.2
+pillow==12.2.0
+python-dotenv==1.2.2
+requests==2.34.2
+pywebview==6.2.1
+websockets==16.0
+duckduckgo_search==8.1.1
