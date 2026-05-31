@@ -190,6 +190,331 @@
       "source": "user's father",
       "relation": "location",
       "target": "chennai"
+    },
+    {
+      "source": "user",
+      "relation": "lives_in",
+      "target": "tirunelveli"
+    },
+    {
+      "source": "user",
+      "relation": "interested_in",
+      "target": "vijay"
+    },
+    {
+      "source": "user",
+      "relation": "has",
+      "target": "wallpaper"
+    },
+    {
+      "source": "user",
+      "relation": "uses",
+      "target": "terminal window"
+    },
+    {
+      "source": "user",
+      "relation": "uses",
+      "target": "live2d model"
+    },
+    {
+      "source": "user",
+      "relation": "programs",
+      "target": "code"
+    },
+    {
+      "source": "user",
+      "relation": "uses_software",
+      "target": "qbittorrent"
+    },
+    {
+      "source": "user",
+      "relation": "enjoys",
+      "target": "anime"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "anime"
+    },
+    {
+      "source": "user",
+      "relation": "has",
+      "target": "sister"
+    },
+    {
+      "source": "user",
+      "relation": "interested_in",
+      "target": "tokyo"
+    },
+    {
+      "source": "user",
+      "relation": "runs_process",
+      "target": "qbittorrent"
+    },
+    {
+      "source": "user",
+      "relation": "runs_process",
+      "target": "python"
+    },
+    {
+      "source": "user",
+      "relation": "runs_process",
+      "target": "browser"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "mouse"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "webcam"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "fingerprint sensor"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "bluetooth device"
+    },
+    {
+      "source": "user",
+      "relation": "files_in_downloads",
+      "target": "407"
+    },
+    {
+      "source": "user",
+      "relation": "name",
+      "target": "kida"
+    },
+    {
+      "source": "user",
+      "relation": "speaks",
+      "target": "tamil"
+    },
+    {
+      "source": "user",
+      "relation": "prefers_language",
+      "target": "tamil"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "87gb demon slayer repack bin file"
+    },
+    {
+      "source": "user",
+      "relation": "hobby",
+      "target": "gaming"
+    },
+    {
+      "source": "user",
+      "relation": "is_running",
+      "target": "song"
+    },
+    {
+      "source": "user",
+      "relation": "dislikes",
+      "target": "terminating tasks"
+    },
+    {
+      "source": "user",
+      "relation": "prefers_language",
+      "target": "japanese"
+    },
+    {
+      "source": "user",
+      "relation": "watched",
+      "target": "demon slayer"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "demon slayer"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "demon slayer wallpapers"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "demon slayer videos"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "demon slayer game repack"
+    },
+    {
+      "source": "user",
+      "relation": "interest",
+      "target": "linux enumeration"
+    },
+    {
+      "source": "user",
+      "relation": "has_child",
+      "target": "daughter"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "demon slayer image"
+    },
+    {
+      "source": "user",
+      "relation": "likes_music",
+      "target": "karuppu"
+    },
+    {
+      "source": "user",
+      "relation": "has_wallpaper",
+      "target": "tanjiro"
+    },
+    {
+      "source": "user",
+      "relation": "likes_anime",
+      "target": "demon slayer"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "romance anime"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "karuppu saami"
+    },
+    {
+      "source": "user",
+      "relation": "has_folder",
+      "target": "projects"
+    },
+    {
+      "source": "user",
+      "relation": "owns",
+      "target": "projects folder"
+    },
+    {
+      "source": "user",
+      "relation": "lives_in",
+      "target": "chennai"
+    },
+    {
+      "source": "user",
+      "relation": "lives_near",
+      "target": "east of toronto"
+    },
+    {
+      "source": "socks_see",
+      "relation": "name",
+      "target": "user_preferred_name"
+    },
+    {
+      "source": "user",
+      "relation": "name",
+      "target": "saksar le"
+    },
+    {
+      "source": "user",
+      "relation": "occupation",
+      "target": "coding"
+    },
+    {
+      "source": "user",
+      "relation": "activity",
+      "target": "analyzing system logs"
+    },
+    {
+      "source": "user",
+      "relation": "profession",
+      "target": "python developer"
+    },
+    {
+      "source": "user",
+      "relation": "lives_in",
+      "target": "tokyo"
+    },
+    {
+      "source": "user",
+      "relation": "desktop_wallpaper",
+      "target": "demon slayer character"
+    },
+    {
+      "source": "user",
+      "relation": "has_character",
+      "target": "live2d"
+    },
+    {
+      "source": "user",
+      "relation": "uses_overlay",
+      "target": "live2d character on file manager"
+    },
+    {
+      "source": "user",
+      "relation": "affiliation",
+      "target": "anand foundation system"
+    },
+    {
+      "source": "user",
+      "relation": "prefers",
+      "target": "child-like voice"
+    },
+    {
+      "source": "user",
+      "relation": "adjusted",
+      "target": "pitch factor"
+    },
+    {
+      "source": "user",
+      "relation": "contact_name",
+      "target": "chen"
+    },
+    {
+      "source": "user",
+      "relation": "issue_id",
+      "target": "41086"
+    },
+    {
+      "source": "user",
+      "relation": "enjoys",
+      "target": "doraemon opening song tamil"
+    },
+    {
+      "source": "user",
+      "relation": "enjoys",
+      "target": "roleplaying"
+    },
+    {
+      "source": "user",
+      "relation": "interested_in",
+      "target": "accents"
+    },
+    {
+      "source": "user",
+      "relation": "role",
+      "target": "digital friend"
+    },
+    {
+      "source": "user",
+      "relation": "enjoys",
+      "target": "roleplay as a japanese npc"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "ai"
+    },
+    {
+      "source": "user",
+      "relation": "likes_to_do",
+      "target": "keep track of north korean missile launches"
     }
   ]
 }

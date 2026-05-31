@@ -10,14 +10,10 @@ pitch_factor = 1.18
 # false_interruption_timeout = 0.6
 # agent_state_hold_sec = 0.8
 
-# [noise_gate] (RESERVED FOR FUTURE USE — Currently ignored by core pipeline)
-# enabled = true
-# min_rms = 120.0
-# ratio = 2.5
-# attack_frames = 2
-# hold_frames = 6
-# alpha = 0.95
-# calibration_sec = 1.5
+[noise_gate]
+enabled = true
+min_rms = 20.0
+hold_frames = 8
 
 # [emotion] (RESERVED FOR FUTURE USE — Currently ignored by core pipeline)
 # frame_sec = 0.2
@@ -44,11 +40,16 @@ recv_rate = 24000
 chunk = 1024
 
 [persona]
-persona_file = "hyori.txt"
+persona_file = "personac.txt"
 
 [live2d]
 enabled = true
-width = 500
+width = 950
 height = 700
-scale = 0.32
-y_offset = 40
+scale = 0.25
+y_offset = -20
+
+[barge_in]
+enabled = true
+threshold = 80.0
+feedback_ratio = 0.0  # Set to 0.0 for headphones (instant interruption) or 0.1-0.2 for speakers

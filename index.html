@@ -4,132 +4,409 @@
   <meta charset="utf-8">
   <title>Live2D Companion</title>
   <!-- Load PIXI.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/5.3.12/pixi.min.js"
-    onerror="document.body.innerHTML='<div style=color:red;padding:20px>ERROR: Failed to load PIXI.js from CDN. Check your internet connection.</div>'"></script>
+  <script src="js/pixi.min.js"
+    onerror="window.addEventListener('DOMContentLoaded', () => { document.body.innerHTML='<div style=color:red;padding:20px>ERROR: Failed to load local PIXI.js library. Make sure js/pixi.min.js exists.</div>'; })"></script>
   <!-- Load Cubism Core -->
-  <script src="https://cdn.jsdelivr.net/npm/live2dcubismcore@1.0.2/live2dcubismcore.min.js"
-    onerror="console.error('Failed to load Cubism Core')"></script>
+  <script src="js/live2dcubismcore.min.js"
+    onerror="console.error('Failed to load local Cubism Core library')"></script>
   <!-- Load pixi-live2d-display Cubism 4 runtime -->
-  <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/cubism4.min.js"
-    onerror="console.error('Failed to load pixi-live2d-display')"></script>
+  <script src="js/cubism4.min.js"
+    onerror="console.error('Failed to load local pixi-live2d-display library')"></script>
   <!-- Load Google Font Inter -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: transparent;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    canvas {
-      width: 100vw;
-      height: 100vh;
-      display: block;
-    }
-    #speech-container {
-      position: absolute;
-      top: 15px;
-      left: 15px;
-      width: 240px;
-      max-height: 220px;          /* L03: prevent overflow off-screen */
-      overflow-y: auto;           /* L03: scroll long responses */
-      --vibe-color: rgba(255, 255, 255, 0.22);
-      background: rgba(20, 20, 32, 0.55);
-      border: 1.5px solid var(--vibe-color);
-      border-radius: 16px;
-      padding: 12px 16px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.2);
-      backdrop-filter: blur(25px) saturate(190%);
-      -webkit-backdrop-filter: blur(25px) saturate(190%);
-      z-index: 1000;
+    body { margin: 0; overflow: hidden; background: transparent; user-select: none; -webkit-user-select: none; }
+    @keyframes scifi-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes scifi-spin-reverse { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+    @keyframes border-glow-breathe { 0%, 100% { filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.3)); } 50% { filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.6)); } }
+    @keyframes scanline-sweep { 0% { transform: translateX(-100%); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateX(200%); opacity: 0; } }
+    @keyframes neon-text-pulse { 0%, 100% { text-shadow: 0 0 4px rgba(0, 240, 255, 0.5); } 50% { text-shadow: 0 0 10px rgba(0, 240, 255, 0.9), 0 0 20px rgba(0, 240, 255, 0.3); } }
+    @keyframes hud-glitch { 0% { opacity: 0.3; transform: translate(2px, -2px) skewX(5deg); filter: brightness(2) contrast(1.5) hue-rotate(90deg); } 20% { opacity: 0.8; transform: translate(-2px, 2px) skewX(-5deg); } 40% { opacity: 0.5; transform: translate(1px, -1px) skewX(2deg); filter: brightness(1.2) contrast(1.1) hue-rotate(0deg); } 60% { opacity: 1; transform: translate(0, 0) scale(1.02); } 80% { opacity: 0.9; transform: translate(-1px, 1px) skewX(-2deg); } 100% { opacity: 1; transform: translate(0, 0) scale(1); } }
+    @keyframes aura-particle-drift { 0%, 100% { box-shadow: 0 0 10px var(--vibe-color, rgba(0, 240, 255, 0.3)), inset 0 0 5px var(--vibe-color, rgba(0, 240, 255, 0.2)); } 33% { box-shadow: 0 0 16px var(--vibe-color, rgba(0, 240, 255, 0.5)), inset 0 0 8px var(--vibe-color, rgba(0, 240, 255, 0.3)), 3px -3px 6px rgba(0, 240, 255, 0.15); } 66% { box-shadow: 0 0 12px var(--vibe-color, rgba(0, 240, 255, 0.4)), inset 0 0 6px var(--vibe-color, rgba(0, 240, 255, 0.25)), -3px 3px 6px rgba(0, 200, 255, 0.1); } }
+    @keyframes slide-up-in { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+    @keyframes slide-down-out { from { transform: translateX(-50%) translateY(0); opacity: 1; } to { transform: translateX(-50%) translateY(20px); opacity: 0; } }
+    @keyframes scan-anim { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
+    @keyframes pulse-anim { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+
+    canvas { width: 100vw; height: 100vh; display: block; filter: sepia(1) hue-rotate(185deg) saturate(5) brightness(0.95) contrast(1.1) drop-shadow(0 0 10px rgba(0, 240, 255, 0.6)); opacity: 0.82; -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); }
+
+    #speech-container { position: relative; width: 100%; max-height: 220px; display: flex; flex-direction: column; z-index: 1000; opacity: 0; pointer-events: none; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: visible; background: transparent; box-shadow: none; border: none; clip-path: none; filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.4)); animation: border-glow-breathe 4s ease-in-out infinite; }
+    #speech-card { width: 100%; height: 100%; box-sizing: border-box; background: linear-gradient(135deg, var(--vibe-color, rgba(0, 240, 255, 0.85)), rgba(0, 120, 255, 0.35)); padding: 1.5px; clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px)); transition: background 0.6s ease; }
+    #speech-inner { width: 100%; height: 100%; box-sizing: border-box; background: rgba(4, 10, 18, 0.96); backdrop-filter: blur(12px) saturate(1.4); -webkit-backdrop-filter: blur(12px) saturate(1.4); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: none; -ms-overflow-style: none; clip-path: polygon(0 0, calc(100% - 15.5px) 0, 100% 15.5px, 100% 100%, 15.5px 100%, 0 calc(100% - 15.5px)); box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.12); position: relative; overflow: hidden; }
+    #speech-inner::after { content: ''; position: absolute; top: 0; left: 0; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.06), transparent); animation: scanline-sweep 6s ease-in-out infinite; pointer-events: none; }
+    #speech-inner::-webkit-scrollbar { display: none; }
+    #speech-container.visible { opacity: 1; pointer-events: auto; }
+    #speech-container.compact { width: auto; max-width: 180px; }
+    #speech-container.compact #speech-card { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+    #speech-container.compact #speech-inner { padding: 5px 10px; clip-path: polygon(0 0, calc(100% - 10.5px) 0, 100% 10.5px, 100% 100%, 10.5px 100%, 0 calc(100% - 10.5px)); }
+    #speech-container.compact #speech-header { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    #speech-container.compact #speech-status, #speech-container.compact #speech-text { display: none !important; }
+
+    #speech-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid rgba(0, 240, 255, 0.3); padding-bottom: 5px; margin-bottom: 3px; position: relative; }
+    #speech-vibe-container { display: flex; align-items: center; gap: 6px; }
+    #speech-icon { display: flex; align-items: center; justify-content: center; }
+    #speech-icon svg { width: 14px; height: 14px; fill: none; stroke: var(--vibe-color, #00f0ff); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px var(--vibe-color, #00f0ff)); transition: stroke 0.4s ease, filter 0.4s ease; }
+    #speech-vibe { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: #00f0ff; font-weight: 700; font-family: 'Courier New', Courier, monospace; text-shadow: 0 0 5px rgba(0, 240, 255, 0.6); animation: neon-text-pulse 3s ease-in-out infinite; }
+    #speech-status { font-size: 9px; letter-spacing: 0.8px; color: #00f0ff; font-weight: 800; font-family: 'Courier New', Courier, monospace; }
+    #speech-text { font-size: 12px; line-height: 1.45; color: #e0f7fc; font-weight: 500; font-family: 'Inter', system-ui, -apple-system, sans-serif; word-wrap: break-word; text-shadow: 0 0 2px rgba(224, 247, 252, 0.3); }
+
+    #prompt-toggle-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 4px; background: rgba(0, 240, 255, 0.08); cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); flex-shrink: 0; margin-left: 6px; }
+    #prompt-toggle-btn:hover { background: rgba(0, 240, 255, 0.2); border-color: rgba(0, 240, 255, 0.8); transform: scale(1.12); box-shadow: 0 0 10px rgba(0, 240, 255, 0.4); }
+    #prompt-toggle-btn:active { transform: scale(0.95); }
+    #prompt-toggle-btn.active { background: rgba(0, 240, 255, 0.25); border-color: #00f0ff; box-shadow: 0 0 8px rgba(0, 240, 255, 0.5); }
+    #prompt-toggle-btn svg { width: 13px; height: 13px; fill: none; stroke: #00f0ff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 2px #00f0ff); }
+
+    #speech-loader { display: none; align-items: center; justify-content: center; padding: 12px 0; width: 100%; }
+    #speech-loader svg { width: 28px; height: 28px; animation: scifi-spin 2s linear infinite; transform-origin: center; filter: drop-shadow(0 0 5px var(--vibe-color, #00f0ff)); }
+
+    #audio-aura { position: absolute; left: calc(100% + 22px); top: 36px; transform: translate(-50%, -50%) scale(0.8); width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle, rgba(0, 240, 255, 0.6) 0%, rgba(0, 240, 255, 0.1) 60%, transparent 80%); border: 1px solid var(--vibe-color, rgba(0, 240, 255, 0.4)); animation: aura-particle-drift 3s ease-in-out infinite; pointer-events: none; z-index: 1006; opacity: 0; transition: transform 0.08s cubic-bezier(0.1, 0.8, 0.3, 1), opacity 0.1s ease; }
+    #speech-pointer { position: absolute; left: 100%; top: 18px; transform: translateY(-50%); pointer-events: none; overflow: visible; z-index: 1005; }
+
+    #left-hud { position: absolute; left: calc(50% - 370px); top: 24px; width: 250px; max-width: 250px; display: flex; flex-direction: column; gap: 18px; z-index: 1000; pointer-events: none; transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease; }
+    #right-hud { position: absolute; right: calc(50% - 370px); top: 24px; width: 250px; max-width: 250px; display: flex; flex-direction: column; gap: 18px; z-index: 1000; pointer-events: none; transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease; }
+    #left-hud.speaking-push { transform: translateX(-40px); opacity: 0.6; }
+    #right-hud.speaking-push { transform: translateX(40px); opacity: 0.6; }
+    #left-hud.speaking-push:hover, #right-hud.speaking-push:hover { opacity: 1; }
+    #left-hud .hud-box:hover { transform: translateX(-15px) scale(1.02); filter: drop-shadow(0 0 18px rgba(0, 240, 255, 0.6)); }
+    #right-hud .hud-box:hover { transform: translateX(15px) scale(1.02); filter: drop-shadow(0 0 18px rgba(0, 240, 255, 0.6)); }
+
+    .hud-box { width: 100%; opacity: 0; pointer-events: none; transform: translateY(10px) scale(0.98); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.35)); }
+    .hud-box.visible { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+    .hud-box.active-glitch { animation: hud-glitch 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+    .hud-card { width: 100%; box-sizing: border-box; background: linear-gradient(135deg, var(--vibe-color, rgba(0, 240, 255, 0.85)), rgba(0, 120, 255, 0.35)); padding: 1.5px; clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px)); transition: background 0.5s ease; }
+    .hud-inner { width: 100%; box-sizing: border-box; background: rgba(8, 20, 32, 0.82); backdrop-filter: blur(10px) saturate(1.3); -webkit-backdrop-filter: blur(10px) saturate(1.3); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; clip-path: polygon(0 0, calc(100% - 15.5px) 0, 100% 15.5px, 100% 100%, 15.5px 100%, 0 calc(100% - 15.5px)); box-shadow: inset 0 0 14px rgba(0, 240, 255, 0.12); position: relative; overflow: hidden; }
+    .hud-inner::after { content: ''; position: absolute; top: 0; left: 0; width: 35%; height: 100%; background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.04), transparent); animation: scanline-sweep 8s ease-in-out infinite; pointer-events: none; }
+    .hud-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid rgba(0, 240, 255, 0.3); padding-bottom: 5px; margin-bottom: 2px; gap: 12px; }
+    .hud-title-container { display: flex; align-items: center; gap: 4px; }
+    .hud-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: #00f0ff; font-weight: 700; font-family: 'Courier New', Courier, monospace; text-shadow: 0 0 5px rgba(0, 240, 255, 0.6); animation: neon-text-pulse 4s ease-in-out infinite; }
+    .hud-status { font-size: 9px; letter-spacing: 0.8px; color: #00f0ff; font-weight: 800; font-family: 'Courier New', Courier, monospace; margin-left: auto; transition: color 0.4s ease; }
+
+    .hud-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; transition: box-shadow 0.3s ease; }
+    .hud-dot.red { background-color: #ff3b30; box-shadow: 0 0 6px #ff3b30; }
+    .hud-dot.yellow { background-color: #ffcc00; box-shadow: 0 0 6px #ffcc00; }
+    .hud-dot.green { background-color: #34c759; box-shadow: 0 0 6px #34c759; }
+
+    .image-carousel { display: flex; overflow-x: auto; gap: 8px; padding-bottom: 5px; scrollbar-width: none; -ms-overflow-style: none; }
+    .image-carousel::-webkit-scrollbar { display: none; }
+    .image-card { flex: 0 0 130px; height: 110px; border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 4px; overflow: hidden; position: relative; display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.4); transition: border-color 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease; }
+    .image-card:hover { border-color: rgba(0, 240, 255, 0.9); transform: translateY(-4px); box-shadow: 0 0 15px rgba(0, 240, 255, 0.5); z-index: 100; }
+    .image-card img { width: 100%; height: 82px; object-fit: cover; border-bottom: 1px solid rgba(0, 240, 255, 0.2); }
+    .image-card-title { font-size: 8px; color: #e0f7fc; padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Inter', sans-serif; }
+    .image-card-resolution { position: absolute; top: 4px; right: 4px; background: rgba(8, 20, 32, 0.85); border: 0.5px solid rgba(0, 240, 255, 0.5); font-size: 7px; color: #00f0ff; padding: 1px 3px; border-radius: 2px; font-family: monospace; }
+
+    .screen-preview-container { position: relative; width: 100%; height: 120px; border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 4px; overflow: hidden; background: #000; transition: border-color 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease; transform-origin: center; }
+    .screen-preview-container:hover { border-color: rgba(0, 240, 255, 0.9); transform: scale(1.25) translateY(-5px); box-shadow: 0 0 25px rgba(0, 240, 255, 0.7); z-index: 100; }
+
+    .terminal-box { width: 100%; max-height: 100px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 9px; line-height: 1.3; padding: 6px; background: rgba(0, 5, 10, 0.5); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 4px; box-shadow: inset 0 0 8px rgba(0, 240, 255, 0.08); scrollbar-width: none; -ms-overflow-style: none; }
+    .terminal-box::-webkit-scrollbar { display: none; }
+    .terminal-line { word-break: break-all; margin-bottom: 2px; }
+    .terminal-line.cyan { color: #00f0ff; text-shadow: 0 0 3px rgba(0, 240, 255, 0.5); }
+    .terminal-line.cyan-dim { color: rgba(0, 240, 255, 0.6); }
+    .terminal-line.green { color: #34c759; text-shadow: 0 0 3px rgba(52, 199, 89, 0.5); }
+    .terminal-line.yellow { color: #ffcc00; text-shadow: 0 0 3px rgba(255, 204, 0, 0.5); }
+    .terminal-line.red { color: #ff3b30; text-shadow: 0 0 3px rgba(255, 59, 48, 0.5); }
+
+    .search-results-list { display: flex; flex-direction: column; gap: 6px; max-height: 250px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .search-results-list::-webkit-scrollbar { display: none; }
+    .search-item { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid rgba(0, 240, 255, 0.15); background: rgba(0, 5, 10, 0.3); border-radius: 4px; transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease; }
+    .search-item:hover { border-color: rgba(0, 240, 255, 0.5); background: rgba(0, 10, 20, 0.5); transform: translateX(3px); }
+    .search-item-header { display: flex; align-items: center; gap: 6px; }
+    .search-item-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .search-item-icon svg { width: 12px; height: 12px; fill: none; stroke: #00f0ff; stroke-width: 2; }
+    .search-item-title { font-size: 10px; font-weight: 600; color: #00f0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Inter', sans-serif; }
+    .search-item-snippet { font-size: 8px; color: rgba(224, 247, 252, 0.7); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; font-family: 'Inter', sans-serif; }
+    .search-item-domain { font-size: 7px; color: rgba(0, 240, 255, 0.5); font-family: monospace; text-align: right; margin-top: 1px; }
+
+    #prompt-container { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 90vw; z-index: 2000; pointer-events: auto; display: none; filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.4)); }
+    #prompt-container.visible { display: block; animation: slide-up-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    #prompt-container.hiding { animation: slide-down-out 0.25s cubic-bezier(0.7, 0, 0.84, 0) both; }
+    #prompt-card { width: 100%; box-sizing: border-box; background: linear-gradient(135deg, rgba(0, 240, 255, 0.75), rgba(0, 120, 255, 0.3)); padding: 1.5px; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+    #prompt-inner { width: 100%; box-sizing: border-box; background: rgba(4, 10, 18, 0.96); backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5); padding: 10px 14px; display: flex; align-items: center; gap: 10px; clip-path: polygon(0 0, calc(100% - 12.5px) 0, 100% 12.5px, 100% 100%, 12.5px 100%, 0 calc(100% - 12.5px)); box-shadow: inset 0 0 12px rgba(0, 240, 255, 0.1); }
+    #prompt-label { font-size: 8px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(0, 240, 255, 0.5); font-family: 'Courier New', monospace; font-weight: 700; flex-shrink: 0; }
+    #prompt-input { flex: 1; background: rgba(0, 15, 25, 0.6); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 4px; color: #e0f7fc; font-size: 12px; font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 500; padding: 8px 12px; outline: none; transition: border-color 0.3s ease, box-shadow 0.3s ease; caret-color: #00f0ff; }
+    #prompt-input::placeholder { color: rgba(0, 240, 255, 0.35); font-style: italic; }
+    #prompt-input:focus { border-color: rgba(0, 240, 255, 0.7); box-shadow: 0 0 8px rgba(0, 240, 255, 0.2), inset 0 0 6px rgba(0, 240, 255, 0.08); }
+    #prompt-send-btn { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid rgba(0, 240, 255, 0.5); border-radius: 4px; background: rgba(0, 240, 255, 0.1); cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); flex-shrink: 0; }
+    #prompt-send-btn:hover { background: rgba(0, 240, 255, 0.25); border-color: #00f0ff; transform: scale(1.1); box-shadow: 0 0 14px rgba(0, 240, 255, 0.5); }
+    #prompt-send-btn:active { transform: scale(0.92); }
+    #prompt-send-btn svg { width: 16px; height: 16px; fill: none; stroke: #00f0ff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px #00f0ff); }
+
+    #large-image-preview {
+      position: fixed;
+      bottom: 95px;
+      left: 50%;
+      transform: translateX(-50%) scale(0.9);
+      width: 380px;
+      max-width: 90vw;
+      z-index: 3000;
+      filter: drop-shadow(0 0 20px rgba(0, 240, 255, 0.6));
       opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       pointer-events: none;
-      transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-    #speech-container::-webkit-scrollbar {
       display: none;
+      transform-origin: bottom center;
     }
-    #speech-container.visible {
+    #large-image-preview.visible {
       opacity: 1;
+      transform: translateX(-50%) scale(1);
       pointer-events: auto;
     }
-    #speech-container.compact {
-      width: auto;
-      max-width: 180px;
-      padding: 6px 14px;
-      border-radius: 20px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    #large-image-card {
+      width: 100%;
+      box-sizing: border-box;
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.8), rgba(0, 120, 255, 0.4));
+      padding: 1.5px;
+      clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
     }
-    #speech-container.compact #speech-header {
-      border-bottom: none;
-      margin-bottom: 0;
-      padding-bottom: 0;
+    #large-image-inner {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(4, 10, 18, 0.98);
+      backdrop-filter: blur(16px) saturate(1.5);
+      -webkit-backdrop-filter: blur(16px) saturate(1.5);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      clip-path: polygon(0 0, calc(100% - 15.5px) 0, 100% 15.5px, 100% 100%, 15.5px 100%, 0 calc(100% - 15.5px));
+      box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.15);
     }
-    #speech-container.compact #speech-status,
-    #speech-container.compact #speech-text {
-      display: none !important;
-    }
-    #speech-header {
+    #large-image-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      border-bottom: 1px solid rgba(0, 240, 255, 0.3);
       padding-bottom: 4px;
-      margin-bottom: 2px;
     }
-    #speech-vibe {
-      font-size: 11px;
+    #large-image-title {
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: rgba(255, 255, 255, 0.85);
+      letter-spacing: 1.2px;
+      color: #00f0ff;
       font-weight: 700;
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-family: 'Courier New', monospace;
+      text-shadow: 0 0 5px rgba(0, 240, 255, 0.6);
     }
-    #speech-status {
-      font-size: 9px;
-      letter-spacing: 0.5px;
-      color: #ff69b4;
-      font-weight: 800;
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    #large-image-close-btn {
+      background: transparent;
+      border: none;
+      color: #00f0ff;
+      font-size: 18px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.3s ease;
     }
-    #speech-text {
-      font-size: 12.5px;
-      line-height: 1.45;
-      color: rgba(255, 255, 255, 0.95);
-      font-weight: 500;
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      word-wrap: break-word;
+    #large-image-close-btn:hover {
+      color: #ff3b30;
+      text-shadow: 0 0 5px rgba(255, 59, 48, 0.6);
     }
-    #speech-container::after {
-      content: '';
-      position: absolute;
-      bottom: -8px;
-      right: 40px; /* point down-right towards her head */
-      border-width: 8px 8px 0;
-      border-style: solid;
-      border-color: var(--vibe-color) transparent;
-      display: block;
-      width: 0;
-      height: 0;
-      transition: border-color 0.4s ease;
+    #large-image-img {
+      width: 100%;
+      height: auto;
+      max-height: 350px;
+      object-fit: contain;
+      border: 1px solid rgba(0, 240, 255, 0.2);
+      border-radius: 4px;
+      background: #000;
+    }
+    #large-image-footer {
+      display: flex;
+      justify-content: flex-end;
+      font-size: 8px;
+      color: rgba(0, 240, 255, 0.6);
+      font-family: monospace;
+    }
+
+    /* Floating Hover Image Preview Styles */
+    #hover-image-preview {
+      position: fixed;
+      bottom: 95px;
+      left: calc(50% - 180px);
+      transform: translateX(-50%) scale(0.9);
+      z-index: 2500;
+      pointer-events: none;
+      display: none;
+      border: 1.5px solid #00f0ff;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.8);
+      width: 320px;
+      height: 240px;
+      opacity: 0;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+      transform-origin: bottom center;
+    }
+    #hover-image-preview.visible {
+      transform: translateX(-50%) scale(1);
+      opacity: 1;
+    }
+    #hover-preview-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
   </style>
+
 </head>
-<body class="pywebview-drag-region">
-  <div id="speech-container" class="pywebview-drag-region">
-    <div id="speech-header" class="pywebview-drag-region">
-      <div id="speech-vibe" class="pywebview-drag-region">😴 Sleeping</div>
-      <div id="speech-status" class="pywebview-drag-region">SLEEPING</div>
+<body>
+  <!-- Left HUD Column (interactive) -->
+  <div id="left-hud">
+    <div id="speech-container">
+      <div id="speech-card">
+        <div id="speech-inner">
+          <div id="speech-header" class="pywebview-drag-region" style="cursor: move;">
+            <div id="speech-vibe-container">
+              <div id="speech-icon"></div>
+              <div id="speech-vibe">SYSTEM: STANDBY</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div id="speech-status">SLEEPING</div>
+              <button id="prompt-toggle-btn" title="Toggle Prompt Input">
+                <svg viewBox="0 0 24 24">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div id="speech-text"></div>
+          <!-- High-tech sci-fi dynamic loader displayed in empty states / thinking / task execution -->
+          <div id="speech-loader">
+            <svg viewBox="0 0 50 50">
+              <circle cx="25" cy="25" r="20" fill="none" stroke="var(--vibe-color, #00f0ff)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="32 12" />
+              <circle cx="25" cy="25" r="12" fill="none" stroke="var(--vibe-color, #00f0ff)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="12 18" style="animation: scifi-spin-reverse 1.2s linear infinite; transform-origin: center;" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Micro voice-reactive aura centered exactly on the pointer terminal circle 'o' on the right side -->
+      <div id="audio-aura"></div>
+      
+      <!-- High-tech glowing vector SVG HUD callout pointer pointing from the right edge of the card towards Hyori -->
+      <svg id="speech-pointer" width="30" height="48">
+        <defs>
+          <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <!-- Horizontal line (length 10px) starting at middle of card's right side, then diagonal angling down-right -->
+        <path d="M 0,30 L 10,30 L 22,42" fill="none" stroke="var(--vibe-color, #00f0ff)" stroke-width="1.5" filter="url(#neon-glow)" />
+        <!-- Terminal circle 'o' at the end of the diagonal line -->
+        <circle cx="22" cy="42" r="4" fill="#081420" stroke="var(--vibe-color, #00f0ff)" stroke-width="1.5" filter="url(#neon-glow)" />
+      </svg>
     </div>
-    <div id="speech-text" class="pywebview-drag-region"></div>
+
+    <!-- Image Results HUD (horizontal side-scrolled carousel & screen preview) -->
+    <div id="image-results-hud" class="hud-box">
+      <div class="hud-card">
+        <div class="hud-inner">
+          <div class="hud-header pywebview-drag-region" style="cursor: move;">
+            <div class="hud-title-container">
+              <span class="hud-dot green"></span>
+              <span class="hud-title">VISUAL_INTELLIGENCE</span>
+            </div>
+            <span class="hud-status">STANDBY</span>
+          </div>
+          <div class="image-carousel" id="image-carousel">
+            <!-- Dynamic image cards will be appended here -->
+          </div>
+          <!-- Screen Capture Preview Container -->
+          <div id="screen-capture-preview" style="display: none; flex-direction: column; gap: 8px; width: 100%;">
+            <div class="screen-preview-container">
+              <img id="screen-preview-img" style="width: 100%; height: 100%; object-fit: contain;">
+              <div class="scanner-line" style="position: absolute; left: 0; top: 0; width: 100%; height: 2px; background: linear-gradient(to right, transparent, #00f0ff, transparent); box-shadow: 0 0 8px #00f0ff; animation: scan-anim 2s linear infinite;"></div>
+            </div>
+            <div class="screen-analysis-status" style="font-size: 10px; color: #34c759; font-weight: bold; text-shadow: 0 0 5px rgba(52, 199, 89, 0.6); text-align: center; animation: pulse-anim 1.5s ease-in-out infinite; font-family: monospace; letter-spacing: 1px;">ANALYSING...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal Console HUD -->
+    <div id="terminal-hud" class="hud-box">
+      <div class="hud-card">
+        <div class="hud-inner">
+          <div class="hud-header pywebview-drag-region" style="cursor: move;">
+            <div class="hud-title-container">
+              <span class="hud-dot red"></span>
+              <span class="hud-dot yellow"></span>
+              <span class="hud-dot green"></span>
+              <span class="hud-title" style="margin-left: 6px;">CONSOLE_FEED</span>
+            </div>
+            <span class="hud-status">STANDBY</span>
+          </div>
+          <div class="terminal-box" id="terminal-box">
+            <div class="terminal-line cyan-dim">> Awaiting console feed...</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-  <canvas id="canvas" class="pywebview-drag-region"></canvas>
+
+  <!-- Right HUD Column (interactive) -->
+  <div id="right-hud">
+    <div id="web-search-hud" class="hud-box">
+      <div class="hud-card">
+        <div class="hud-inner">
+          <div class="hud-header pywebview-drag-region" style="cursor: move;">
+            <div class="hud-title-container">
+              <span class="hud-dot green"></span>
+              <span class="hud-title">WEB_SEARCH_DB</span>
+            </div>
+            <span class="hud-status">STANDBY</span>
+          </div>
+          <div class="search-results-list" id="search-results-list">
+            <!-- Dynamic search results will be appended here -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <!-- Prompt input container (Quiet Mode) -->
+  <div id="prompt-container">
+    <div id="prompt-card">
+      <div id="prompt-inner">
+        <span id="prompt-label">INPUT_PROMPT:</span>
+        <input type="text" id="prompt-input" placeholder="Type a message silently..." autocomplete="off">
+        <button id="prompt-send-btn" title="Send (Enter)">
+          <svg viewBox="0 0 24 24">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Large Image Preview Overlay (Quiet Mode & Search Visualizer) -->
+  <div id="large-image-preview" onclick="closeLargeImagePreview()">
+    <div id="large-image-card" onclick="event.stopPropagation()">
+      <div id="large-image-inner">
+        <div id="large-image-header">
+          <span id="large-image-title">VISUAL_PREVIEW</span>
+          <button id="large-image-close-btn" onclick="closeLargeImagePreview()">&times;</button>
+        </div>
+        <img id="large-image-img" src="" alt="Large Preview">
+        <div id="large-image-footer">
+          <span id="large-image-resolution"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Hover Preview (completely outside the HUD boxes) -->
+  <div id="hover-image-preview">
+    <img id="hover-preview-img" src="" alt="Preview">
+  </div>
 
   <script>
     const app = new PIXI.Application({
@@ -143,7 +420,11 @@
     let currentEmotion = "idle";
     let currentState = "LISTENING";
     let currentMouth = 0.0;
+    let currentMicRMS = 0.0;
+    let auraRenderedScale = 0.8;
+    let auraRenderedOpacity = 0.0;
     let startledActive = false;
+    let hudAutoDismissTimeout = null;
 
     // Define core target parameters in the global scope so they are shared
     let targetEyeOpenL = 1.0;
@@ -189,123 +470,33 @@
         app.stage.addChild(live2dModel);
         window.live2dModel = live2dModel; // Expose to window for debugger inspects
 
+        // Apply custom high-tech scanline shader/filter
+        const scanlineFragment = `
+          precision mediump float;
+          varying vec2 vTextureCoord;
+          uniform sampler2D uSampler;
+          void main(void) {
+            vec4 color = texture2D(uSampler, vTextureCoord);
+            if (color.a > 0.0) {
+              // High-frequency subtle horizontal scanlines
+              float scanline = sin(vTextureCoord.y * 1000.0) * 0.08;
+              color.rgb = color.rgb - vec3(scanline);
+            }
+            gl_FragColor = color;
+          }
+        `;
+        const scanlineFilter = new PIXI.Filter(undefined, scanlineFragment);
+        live2dModel.filters = [scanlineFilter];
+
         // Adjust dimensions to show only the face
         live2dModel.scale.set(scaleVal); 
         live2dModel.x = window.innerWidth / 2 - (live2dModel.width / 2);
         live2dModel.y = yOffset;
 
-        // Premium Cursor/Mouse Tracking: character's eyes follow cursor & petting/rubbing/tickling gesture detection
-        let lastMoveTime = 0;
-        let lastMoveX = 0;
-        let petAccumulator = 0;
-        let cheekAccumulator = 0;
-        let tickleAccumulator = 0;
-        
         app.stage.interactive = true;
         app.stage.on('pointermove', (event) => {
           if (live2dModel && currentState !== 'THINKING') {
             live2dModel.focus(event.data.global.x, event.data.global.y);
-            
-            const localPoint = live2dModel.toLocal(event.data.global);
-            const bounds = live2dModel.getLocalBounds();
-            if (bounds && bounds.height > 0) {
-              const localYFraction = (localPoint.y - bounds.y) / bounds.height;
-              const localXFraction = (localPoint.x - bounds.x) / bounds.width;
-              const now = Date.now();
-              
-              if (now - lastMoveTime < 150) {
-                const dist = Math.abs(event.data.global.x - lastMoveX);
-                if (dist > 15) {
-                  if (localYFraction < 0.35 && localXFraction >= 0.35 && localXFraction <= 0.65) {
-                    // Head petting (horizontal cursor rubbing in the forehead region)
-                    petAccumulator += 1;
-                    if (petAccumulator > 8) {
-                      console.log("Petting gesture detected via mouse movement!");
-                      window.setEmotion("smug");
-                      petAccumulator = 0;
-                    }
-                  } else if (localYFraction < 0.35 && (localXFraction < 0.35 || localXFraction > 0.65)) {
-                    // Cheek rubbing gesture (sides of the face)
-                    cheekAccumulator += 1;
-                    if (cheekAccumulator > 8) {
-                      console.log("Cheek rubbing gesture detected!");
-                      window.setEmotion("confused");
-                      live2dModel.motion('Flick@Body', 0, 2);
-                      cheekAccumulator = 0;
-                    }
-                  } else if (localYFraction >= 0.60 && localYFraction < 0.80) {
-                    // Tummy tickling gesture
-                    tickleAccumulator += 1;
-                    if (tickleAccumulator > 8) {
-                      console.log("Tummy tickle gesture detected!");
-                      window.setEmotion("smug");
-                      live2dModel.motion('Tap', 0, 2);
-                      tickleAccumulator = 0;
-                    }
-                  }
-                }
-              } else {
-                petAccumulator = Math.max(0, petAccumulator - 1);
-                cheekAccumulator = Math.max(0, cheekAccumulator - 1);
-                tickleAccumulator = Math.max(0, tickleAccumulator - 1);
-              }
-              lastMoveTime = now;
-              lastMoveX = event.data.global.x;
-            }
-          }
-        });
-
-        // Interactive click/poke reactions with premium Cheek Pinch, Head Petting, Chest (Boobs) Angry, and Tummy Tickling hit-zones
-        live2dModel.interactive = true;
-        live2dModel.cursor = 'pointer';
-        live2dModel.on('pointertap', (event) => {
-          console.log("Model tapped!");
-          const localPoint = live2dModel.toLocal(event.data.global);
-          console.log("Local click point:", localPoint.x, localPoint.y);
-          
-          const bounds = live2dModel.getLocalBounds();
-          let localYFraction = 0.5;
-          let localXFraction = 0.5;
-          if (bounds && bounds.height > 0) {
-            localYFraction = (localPoint.y - bounds.y) / bounds.height;
-          }
-          if (bounds && bounds.width > 0) {
-            localXFraction = (localPoint.x - bounds.x) / bounds.width;
-          }
-          console.log("Local Y Fraction:", localYFraction, "Local X Fraction:", localXFraction);
-
-          if (localYFraction < 0.35) {
-            // Upper 35%: Head area
-            if (localXFraction < 0.40) {
-              // Left Cheek Pinch
-              console.log("Zone: Left Cheek pinched -> Embarraased Squirm");
-              window.setEmotion("confused");
-              live2dModel.motion('Flick@Body', 0, 2);
-            } else if (localXFraction > 0.60) {
-              // Right Cheek Pinch
-              console.log("Zone: Right Cheek pinched -> Embarrassed Squirm");
-              window.setEmotion("confused");
-              live2dModel.motion('Flick@Body', 0, 2);
-            } else {
-              // Center Forehead Petting
-              console.log("Zone: Forehead Petting -> Embarrassed Blush");
-              window.setEmotion("smug");
-              live2dModel.motion('FlickUp', 0, 2);
-            }
-          } else if (localYFraction >= 0.35 && localYFraction < 0.60) {
-            // Middle 35% - 60%: Chest/Boobs area - makes her angry
-            console.log("Zone: Chest/Boobs tapped -> Triggering Angry reaction");
-            window.setEmotion("angry");
-            live2dModel.motion('Flick', 0, 2);
-          } else if (localYFraction >= 0.60 && localYFraction < 0.80) {
-            // Lower 60% - 80%: Tummy tickling
-            console.log("Zone: Tummy tickled -> Giggling");
-            window.setEmotion("smug");
-            live2dModel.motion('Tap', 0, 2);
-          } else {
-            // Lower 80%+: Lower body - default posture shrug
-            console.log("Zone: Lower Body tapped -> Triggering Shrug");
-            live2dModel.motion('Tap@Body', 0, 2);
           }
         });
 
@@ -621,6 +812,32 @@
             finalMouthOpen = 0.0;
           }
           core.setParameterValueByIndex(mouthOpenIdx, finalMouthOpen);
+
+          // 10. Update dynamic voice-reactive projection ring/aura (glowing backlight)
+          const audioAura = document.getElementById('audio-aura');
+          if (audioAura) {
+            let activeLevel = currentMicRMS;
+            
+            // If actively speaking, use the speaker mouth output level to also pulse the ring!
+            if (currentState === 'SPEAKING') {
+              activeLevel = currentMouth * 8000.0;
+            }
+            
+            let targetScale = 0.8;
+            let targetOpacity = 0.0;
+            
+            if (activeLevel > 800.0) {
+              targetScale = 0.8 + (activeLevel / 7500.0) * 1.4;
+              targetOpacity = Math.min(0.95, 0.2 + (activeLevel / 4500.0) * 0.6);
+            }
+            
+            // Smooth lerp momentum transitions
+            auraRenderedScale += (targetScale - auraRenderedScale) * 0.2;
+            auraRenderedOpacity += (targetOpacity - auraRenderedOpacity) * 0.2;
+            
+            audioAura.style.transform = `translate(-50%, -50%) scale(${auraRenderedScale})`;
+            audioAura.style.opacity = auraRenderedOpacity;
+          }
         });
 
         // Trigger loading confirmation
@@ -638,37 +855,68 @@
     let speechFadeTimeout;
     let accumulatedText = "";
 
-    // Emotion metadata helper representing she / he is working
+    // High-tech Sci-Fi dynamically glowing SVG icons
+    const scifiIcons = {
+      idle: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="4 2"/><circle cx="12" cy="12" r="3"/></svg>`,
+      listening: `<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10M12 6a6 6 0 0 1 6 6M12 10a2 2 0 0 1 2 2M12 22V12"/></svg>`,
+      speaking: `<svg viewBox="0 0 24 24"><path d="M3 12h3l3-9 4 18 3-12h5"/></svg>`,
+      smug: `<svg viewBox="0 0 24 24"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/><circle cx="12" cy="12" r="4"/></svg>`,
+      angry: `<svg viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zM12 9v4M12 17h.01"/></svg>`,
+      sad: `<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="2 2"/><path d="M8 12h8M12 8v8"/></svg>`,
+      confused: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>`,
+      bored: `<svg viewBox="0 0 24 24"><path d="M21 12H3"/><circle cx="12" cy="12" r="9" stroke-dasharray="5 5"/></svg>`,
+      sleeping: `<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
+      searching: `<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 5a6 6 0 0 1 6 6" stroke-dasharray="2 1"/></svg>`,
+      scan: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10zM2 12h20"/></svg>`,
+      process: `<svg viewBox="0 0 24 24" style="animation: scifi-spin 2s linear infinite; transform-origin: center;"><circle cx="12" cy="12" r="9" stroke-dasharray="5 3"/><circle cx="12" cy="12" r="4"/></svg>`
+    };
+
+    // Emotion metadata helper representing she / he is working (removed emojis for sleek scifi theme)
     const emotionMeta = {
-      idle: { label: "Idle", emoji: "💤", color: "rgba(255,255,255,0.1)", textColor: "#aaaaaa" },
-      listening: { label: "Listening", emoji: "👂", color: "rgba(0,191,255,0.35)", textColor: "#00bfff" },
-      speaking: { label: "Speaking", emoji: "🗣️", color: "rgba(255,105,180,0.35)", textColor: "#ff69b4" },
-      smug: { label: "Vibing", emoji: "😏", color: "rgba(255,165,0,0.35)", textColor: "#ffa500" },
-      angry: { label: "Aggressive Vibe", emoji: "😡", color: "rgba(255,69,0,0.35)", textColor: "#ff4500" },
-      sad: { label: "Sad Vibe", emoji: "😭", color: "rgba(30,144,255,0.35)", textColor: "#1e90ff" },
-      confused: { label: "Thinking / Shocked", emoji: "🤔", color: "rgba(186,85,211,0.35)", textColor: "#ba55d3" },
-      bored: { label: "Bored Vibe", emoji: "😑", color: "rgba(128,128,128,0.35)", textColor: "#808080" },
-      sleeping: { label: "Sleeping", emoji: "😴", color: "rgba(147,112,219,0.35)", textColor: "#9370db" },
-      searching: { label: "Web Searching", emoji: "🔍", color: "rgba(0,250,154,0.35)", textColor: "#00fa9a" },
-      scan: { label: "Browsing Web", emoji: "🌐", color: "rgba(0,255,255,0.35)", textColor: "#00ffff" }
+      idle: { label: "SYSTEM: STANDBY", color: "rgba(0, 240, 255, 0.15)", textColor: "#00f0ff" },
+      listening: { label: "SYSTEM: LISTENING", color: "rgba(0, 240, 255, 0.4)", textColor: "#00f0ff" },
+      speaking: { label: "ASSISTANT: ACTIVE", color: "rgba(50, 180, 255, 0.45)", textColor: "#32b4ff" },
+      smug: { label: "SYSTEM: VIBING", color: "rgba(0, 240, 255, 0.45)", textColor: "#00f0ff" },
+      angry: { label: "ALERT: OVERHEAT", color: "rgba(255, 50, 50, 0.45)", textColor: "#ff3232" },
+      sad: { label: "ALERT: CRITICAL", color: "rgba(50, 100, 255, 0.4)", textColor: "#3264ff" },
+      confused: { label: "SYSTEM: THINKING", color: "rgba(180, 100, 255, 0.45)", textColor: "#b464ff" },
+      bored: { label: "SYSTEM: DIMMED", color: "rgba(120, 140, 160, 0.35)", textColor: "#788ca0" },
+      sleeping: { label: "SYSTEM: SLEEP", color: "rgba(50, 80, 120, 0.3)", textColor: "#325078" },
+      searching: { label: "SYSTEM: SEARCHING", color: "rgba(0, 240, 255, 0.45)", textColor: "#00f0ff" },
+      scan: { label: "SYSTEM: BROWSING", color: "rgba(0, 240, 255, 0.45)", textColor: "#00f0ff" },
+      process: { label: "SYSTEM: PROCESSING", color: "rgba(0, 255, 255, 0.45)", textColor: "#00ffff" }
     };
 
     window.updateSpeechBubbleState = function() {
       const meta = emotionMeta[currentEmotion] || emotionMeta.idle;
+      const iconHtml = scifiIcons[currentEmotion] || scifiIcons.idle;
+      document.getElementById('speech-icon').innerHTML = iconHtml;
+      
+      const leftHud = document.getElementById('left-hud');
+      const rightHud = document.getElementById('right-hud');
+
       if (currentState === 'SPEAKING' || currentState === 'THINKING') {
         speechContainer.classList.remove('compact');
         speechContainer.classList.add('visible');
+        
+        if (leftHud) leftHud.classList.add('speaking-push');
+        if (rightHud) rightHud.classList.add('speaking-push');
       } else {
         // LISTENING or SLEEPING or idle
         speechContainer.classList.add('compact');
         speechContainer.classList.add('visible');
         if (currentState === 'LISTENING') {
-          speechVibe.textContent = `👂 Listening`;
+          speechVibe.textContent = `SYSTEM: LISTENING`;
+          document.getElementById('speech-icon').innerHTML = scifiIcons.listening;
         } else if (currentState === 'SLEEPING') {
-          speechVibe.textContent = `😴 Sleeping`;
+          speechVibe.textContent = `SYSTEM: SLEEP`;
+          document.getElementById('speech-icon').innerHTML = scifiIcons.sleeping;
         } else {
-          speechVibe.textContent = `${meta.emoji} ${meta.label}`;
+          speechVibe.textContent = meta.label;
         }
+        
+        if (leftHud) leftHud.classList.remove('speaking-push');
+        if (rightHud) rightHud.classList.remove('speaking-push');
       }
     };
 
@@ -676,13 +924,22 @@
       if (speechFadeTimeout) clearTimeout(speechFadeTimeout);
       
       const meta = emotionMeta[currentEmotion] || emotionMeta.speaking;
+      const iconHtml = scifiIcons[currentEmotion] || scifiIcons.speaking;
+      document.getElementById('speech-icon').innerHTML = iconHtml;
       
       // Clean tags from text
       let cleaned = text.replace(/\[[A-Z]+\]/g, '').trim();
-      if (!cleaned) return;
-
-      speechTextElement.textContent = cleaned;
-      speechVibe.textContent = `${meta.emoji} ${meta.label}`;
+      
+      if (!cleaned) {
+        speechTextElement.style.display = 'none';
+        document.getElementById('speech-loader').style.display = 'flex';
+      } else {
+        speechTextElement.style.display = 'block';
+        speechTextElement.textContent = cleaned;
+        document.getElementById('speech-loader').style.display = 'none';
+      }
+      
+      speechVibe.textContent = meta.label;
       
       let statusStr = "ACTIVE";
       if (currentState === "THINKING") {
@@ -757,12 +1014,22 @@
     };
 
     // Exposed routines called from Python main.py
+    // Exposed routines called from Python main.py
     window.startTalking = function() {
+      if (hudAutoDismissTimeout) clearTimeout(hudAutoDismissTimeout);
       accumulatedText = "";
       speechTextElement.textContent = "";
+      speechTextElement.style.display = 'none';
+      document.getElementById('speech-loader').style.display = 'flex';
       targetMouthOpenScale = 1.0;  // L02: reset per-turn mouth scale drift
       currentState = 'SPEAKING';
       window.updateSpeechBubbleState();
+      
+      // Magnetic "push away" repelling columns outward
+      const leftHud = document.getElementById('left-hud');
+      const rightHud = document.getElementById('right-hud');
+      if (leftHud) leftHud.classList.add('speaking-push');
+      if (rightHud) rightHud.classList.add('speaking-push');
     };
 
     window.stopTalking = function() {
@@ -771,11 +1038,30 @@
       currentState = 'LISTENING';
       accumulatedText = "";
       speechTextElement.textContent = "";
+      speechTextElement.style.display = 'none';
+      document.getElementById('speech-loader').style.display = 'none';
       window.updateSpeechBubbleState();
+      
+      // Return columns back from push away state
+      const leftHud = document.getElementById('left-hud');
+      const rightHud = document.getElementById('right-hud');
+      if (leftHud) leftHud.classList.remove('speaking-push');
+      if (rightHud) rightHud.classList.remove('speaking-push');
+
+      // Start 10-second auto-dismiss timeout for HUDs when she completes speaking
+      if (hudAutoDismissTimeout) clearTimeout(hudAutoDismissTimeout);
+      hudAutoDismissTimeout = setTimeout(() => {
+        console.log("Auto-dismissing HUDs after 10s of quiet listening.");
+        window.clearSearchHUDs();
+      }, 10000);
     };
 
     window.setMouth = function(val) {
       currentMouth = parseFloat(val);
+    };
+
+    window.setMicRMS = function(val) {
+      currentMicRMS = parseFloat(val);
     };
 
     window.setEmotion = function(emo) {
@@ -784,7 +1070,7 @@
         window.triggerEmotionMotion(emo);
         window.updateSpeechBubbleState();
         if (!speechContainer.classList.contains('compact')) {
-          window.updateSpeechBubble(accumulatedText || "...", true);
+          window.updateSpeechBubble(accumulatedText || "", true);
         }
       }
     };
@@ -794,21 +1080,298 @@
       window.updateSpeechBubbleState();
       
       if (state === 'THINKING') {
+        if (hudAutoDismissTimeout) clearTimeout(hudAutoDismissTimeout);
+        window.clearSearchHUDs(); // Dismiss HUDs on new turn!
         window.setEmotion('process');
-        const meta = emotionMeta[currentEmotion] || emotionMeta.speaking;
-        speechTextElement.textContent = "Processing task / thinking...";
-        speechVibe.textContent = `${meta.emoji} Thinking`;
+        const meta = emotionMeta[currentEmotion] || emotionMeta.process;
+        speechTextElement.textContent = "";
+        speechTextElement.style.display = 'none';
+        document.getElementById('speech-loader').style.display = 'flex';
+        speechVibe.textContent = meta.label;
         speechStatus.textContent = "PROCESSING...";
         speechStatus.style.color = "#00ffff";
         speechContainer.style.boxShadow = `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0,255,255,0.4)`;
         speechContainer.style.setProperty('--vibe-color', 'rgba(0,255,255,0.4)');
-      } else if (state === 'SPEAKING' && currentEmotion === 'idle') {
-        window.triggerEmotionMotion('speaking');
+      } else if (state === 'SPEAKING') {
+        if (currentEmotion === 'process' || currentEmotion === 'searching' || currentEmotion === 'scan' || currentEmotion === 'idle' || currentEmotion === 'sleeping') {
+          window.setEmotion('speaking');
+        }
+        document.getElementById('speech-loader').style.display = 'none';
+        speechTextElement.style.display = 'block';
       } else if (state === 'LISTENING') {
         if (currentEmotion !== 'angry' && currentEmotion !== 'sad' && currentEmotion !== 'bored' && currentEmotion !== 'error') {
           window.setEmotion('listening');
         }
       }
+    };
+
+    // --- CYBERPUNK HUD JS API ---
+    
+    function safeDecodeB64(b64Str) {
+      try {
+        const decoded = decodeURIComponent(escape(atob(b64Str)));
+        return JSON.parse(decoded);
+      } catch (err) {
+        console.error("Base64 decode failed:", err);
+        return null;
+      }
+    }
+
+    window.showSearchHUD = function(b64Data) {
+      const results = safeDecodeB64(b64Data);
+      if (!results || !Array.isArray(results) || results.length === 0) {
+        const box = document.getElementById('web-search-hud');
+        if (box) box.classList.remove('visible', 'active-glitch');
+        return;
+      }
+
+      const listElement = document.getElementById('search-results-list');
+      listElement.innerHTML = '';
+
+      results.forEach(res => {
+        const item = document.createElement('div');
+        item.className = 'search-item';
+        
+        let domain = "";
+        try {
+          domain = new URL(res.url).hostname;
+        } catch (e) {
+          domain = res.url || "web-search";
+        }
+
+        const iconSvg = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10zM2 12h20"/></svg>`;
+
+        item.innerHTML = `
+          <div class="search-item-header">
+            <div class="search-item-icon">${iconSvg}</div>
+            <div class="search-item-title">${res.title || "Web Link"}</div>
+          </div>
+          <div class="search-item-snippet">${res.snippet || ""}</div>
+          <div class="search-item-domain">${domain}</div>
+        `;
+        listElement.appendChild(item);
+      });
+
+      const box = document.getElementById('web-search-hud');
+      box.classList.remove('active-glitch');
+      void box.offsetWidth; // Trigger reflow for animation restart
+      box.classList.add('visible', 'active-glitch');
+      
+      const hudStatus = box.querySelector('.hud-status');
+      if (hudStatus) hudStatus.textContent = "ONLINE";
+    };
+
+    window.showImagesHUD = function(b64Data) {
+      const images = safeDecodeB64(b64Data);
+      if (!images || !Array.isArray(images) || images.length === 0) {
+        const box = document.getElementById('image-results-hud');
+        if (box) box.classList.remove('visible', 'active-glitch');
+        return;
+      }
+
+      const carousel = document.getElementById('image-carousel');
+      const screenPreview = document.getElementById('screen-capture-preview');
+      
+      carousel.style.display = 'flex'; // Ensure image carousel is visible
+      screenPreview.style.display = 'none'; // Ensure screen preview is hidden
+      
+      carousel.innerHTML = '';
+
+      images.forEach(img => {
+        const card = document.createElement('div');
+        card.className = 'image-card';
+        card.style.cursor = 'pointer';
+        card.onclick = (e) => {
+          e.stopPropagation();
+          window.openLargeImagePreview(img.url, img.title, img.resolution);
+        };
+        
+        card.onmouseenter = (e) => {
+          const hoverPreview = document.getElementById('hover-image-preview');
+          const hoverImg = document.getElementById('hover-preview-img');
+          if (!hoverPreview || !hoverImg) return;
+          
+          hoverImg.src = img.url;
+          hoverImg.onerror = function() {
+            this.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop';
+          };
+          
+          hoverPreview.style.display = 'block';
+          // Reflow
+          hoverPreview.offsetHeight;
+          hoverPreview.classList.add('visible');
+        };
+        
+        card.onmouseleave = () => {
+          const hoverPreview = document.getElementById('hover-image-preview');
+          if (!hoverPreview) return;
+          hoverPreview.classList.remove('visible');
+          hoverPreview.style.display = 'none';
+        };
+        
+        card.innerHTML = `
+          <img src="${img.url}" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop';">
+          <div class="image-card-title">${img.title || "Image"}</div>
+          <div class="image-card-resolution">${img.resolution || "HD"}</div>
+        `;
+        carousel.appendChild(card);
+      });
+
+      // Enable horizontal mousewheel conversion for dynamic carousel
+      carousel.addEventListener('wheel', (evt) => {
+        evt.preventDefault();
+        carousel.scrollLeft += evt.deltaY;
+      }, { passive: false });
+
+      const box = document.getElementById('image-results-hud');
+      const hudTitle = box.querySelector('.hud-title');
+      const hudStatus = box.querySelector('.hud-status');
+      
+      if (hudTitle) hudTitle.textContent = "VISUAL_INTELLIGENCE";
+      if (hudStatus) hudStatus.textContent = "ONLINE";
+
+      box.classList.remove('active-glitch');
+      void box.offsetWidth; // Trigger reflow
+      box.classList.add('visible', 'active-glitch');
+    };
+
+    window.showScreenCaptureHUD = function(imgPath) {
+      const carousel = document.getElementById('image-carousel');
+      const screenPreview = document.getElementById('screen-capture-preview');
+      const previewImg = document.getElementById('screen-preview-img');
+      
+      carousel.style.display = 'none';
+      screenPreview.style.display = 'flex';
+      
+      // Append cache-buster timestamp query
+      previewImg.src = imgPath + '?t=' + Date.now();
+
+      const box = document.getElementById('image-results-hud');
+      const hudTitle = box.querySelector('.hud-title');
+      const hudStatus = box.querySelector('.hud-status');
+      
+      if (hudTitle) hudTitle.textContent = "SCREEN_CAPTURE";
+      if (hudStatus) hudStatus.textContent = "SCANNING";
+
+      // Reset scanning animation and state visual effects
+      const scanner = box.querySelector('.scanner-line');
+      const statusText = box.querySelector('.screen-analysis-status');
+      if (scanner) scanner.style.display = 'block';
+      if (statusText) {
+        statusText.textContent = "ANALYSING...";
+        statusText.style.color = "#34c759";
+        statusText.style.textShadow = "0 0 5px rgba(52, 199, 89, 0.6)";
+        statusText.style.animation = "pulse-anim 1.5s ease-in-out infinite";
+      }
+
+      box.classList.remove('active-glitch');
+      void box.offsetWidth; // Trigger reflow
+      box.classList.add('visible', 'active-glitch');
+    };
+
+    window.screenAnalysisComplete = function() {
+      const box = document.getElementById('image-results-hud');
+      if (!box) return;
+      const scanner = box.querySelector('.scanner-line');
+      const statusText = box.querySelector('.screen-analysis-status');
+      const hudStatus = box.querySelector('.hud-status');
+      
+      if (scanner) scanner.style.display = 'none';
+      if (statusText) {
+        statusText.textContent = "COMPLETE";
+        statusText.style.color = "#00f0ff";
+        statusText.style.textShadow = "0 0 5px rgba(0, 240, 255, 0.6)";
+        statusText.style.animation = "none";
+      }
+      if (hudStatus) hudStatus.textContent = "ONLINE";
+    };
+
+    window.updateTerminalHUD = function(b64Data) {
+      const payload = safeDecodeB64(b64Data);
+      if (!payload) return;
+
+      const box = document.getElementById('terminal-box');
+      box.innerHTML = ''; // Keep console feed clean by removing previous tasks' outputs
+      
+      const cmd = payload.command || "";
+      const output = payload.output || "";
+      const type = payload.type || "success";
+
+      const dateStr = new Date().toLocaleTimeString();
+      let colorClass = "cyan-dim";
+      if (type === "error") colorClass = "red";
+      else if (type === "warning") colorClass = "yellow";
+      else if (type === "info") colorClass = "cyan";
+      else if (type === "success") colorClass = "green";
+
+      if (cmd) {
+        const cmdLine = document.createElement('div');
+        cmdLine.className = 'terminal-line cyan';
+        cmdLine.textContent = `[${dateStr}] $ ${cmd}`;
+        box.appendChild(cmdLine);
+      }
+
+      if (output) {
+        const lines = output.split('\n');
+        lines.forEach(line => {
+          if (line.trim()) {
+            const outLine = document.createElement('div');
+            outLine.className = `terminal-line ${colorClass}`;
+            outLine.textContent = line;
+            box.appendChild(outLine);
+          }
+        });
+      }
+
+      box.scrollTop = box.scrollHeight;
+
+      const hudBox = document.getElementById('terminal-hud');
+      hudBox.classList.remove('active-glitch');
+      void hudBox.offsetWidth; // Trigger reflow
+      hudBox.classList.add('visible', 'active-glitch');
+
+      const hudStatus = hudBox.querySelector('.hud-status');
+      if (hudStatus) hudStatus.textContent = "ONLINE";
+    };
+
+    window.clearSearchHUDs = function() {
+      // Return columns back from push away state when HUD is cleared
+      const leftHud = document.getElementById('left-hud');
+      const rightHud = document.getElementById('right-hud');
+      if (leftHud) leftHud.classList.remove('speaking-push');
+      if (rightHud) rightHud.classList.remove('speaking-push');
+
+      const huds = ['web-search-hud', 'image-results-hud', 'terminal-hud'];
+      huds.forEach(id => {
+        const box = document.getElementById(id);
+        if (box) {
+          box.classList.remove('visible', 'active-glitch');
+          const hudStatus = box.querySelector('.hud-status');
+          if (hudStatus) hudStatus.textContent = "STANDBY";
+        }
+      });
+      setTimeout(() => {
+        const searchList = document.getElementById('search-results-list');
+        if (searchList) searchList.innerHTML = '';
+        const carousel = document.getElementById('image-carousel');
+        if (carousel) {
+          carousel.innerHTML = '';
+          carousel.style.display = 'flex';
+        }
+        const screenPreview = document.getElementById('screen-capture-preview');
+        if (screenPreview) screenPreview.style.display = 'none';
+        
+        const imageHUD = document.getElementById('image-results-hud');
+        if (imageHUD) {
+          const hudTitle = imageHUD.querySelector('.hud-title');
+          if (hudTitle) hudTitle.textContent = "VISUAL_INTELLIGENCE";
+        }
+
+        const terminalBox = document.getElementById('terminal-box');
+        if (terminalBox) {
+          terminalBox.innerHTML = '<div class="terminal-line cyan-dim">> Awaiting console feed...</div>';
+        }
+      }, 300);
     };
 
     window.triggerInterruption = function() {
@@ -844,6 +1407,104 @@
         live2dModel.y = yOffset;
       }
     }
+
+    // Toggle Prompt Input Box
+    const promptContainer = document.getElementById('prompt-container');
+    const promptInput = document.getElementById('prompt-input');
+    const promptToggleBtn = document.getElementById('prompt-toggle-btn');
+    const promptSendBtn = document.getElementById('prompt-send-btn');
+
+    function togglePromptBox() {
+      if (!promptContainer) return;
+      if (promptContainer.classList.contains('visible')) {
+        promptContainer.classList.remove('visible');
+        promptContainer.classList.add('hiding');
+        if (promptToggleBtn) promptToggleBtn.classList.remove('active');
+        // Wait for slide-down animation to complete before display: none
+        setTimeout(() => {
+          if (promptContainer.classList.contains('hiding')) {
+            promptContainer.style.display = 'none';
+          }
+        }, 250);
+      } else {
+        promptContainer.style.display = 'block';
+        // Trigger reflow to ensure slide-up animation runs smoothly
+        promptContainer.offsetHeight;
+        promptContainer.classList.remove('hiding');
+        promptContainer.classList.add('visible');
+        if (promptToggleBtn) promptToggleBtn.classList.add('active');
+        promptInput.focus();
+      }
+    }
+
+    function sendTextPrompt() {
+      if (!promptInput) return;
+      const text = promptInput.value.trim();
+      if (!text) return;
+      
+      // Call pywebview Exposed API
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.send_text) {
+        window.pywebview.api.send_text(text);
+      } else {
+        console.warn("[JS] window.pywebview.api.send_text not found");
+      }
+      
+      promptInput.value = "";
+    }
+
+    if (promptToggleBtn) {
+      promptToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Avoid dragging triggers
+        togglePromptBox();
+      });
+    }
+
+    if (promptSendBtn) {
+      promptSendBtn.addEventListener('click', sendTextPrompt);
+    }
+
+    if (promptInput) {
+      promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          sendTextPrompt();
+        }
+      });
+      // Prevent drag region from swallowing input events
+      promptInput.addEventListener('mousedown', (e) => e.stopPropagation());
+    }
+
+    window.openLargeImagePreview = function(url, title, resolution) {
+      const preview = document.getElementById('large-image-preview');
+      const img = document.getElementById('large-image-img');
+      const titleEl = document.getElementById('large-image-title');
+      const resEl = document.getElementById('large-image-resolution');
+      
+      if (!preview || !img) return;
+      
+      img.src = url;
+      img.onerror = function() {
+        this.src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop';
+      };
+      
+      if (titleEl) titleEl.textContent = title ? `PREVIEW: ${title.toUpperCase()}` : "VISUAL_PREVIEW";
+      if (resEl) resEl.textContent = resolution || "AUTO_RESOLVE";
+      
+      preview.style.display = 'block';
+      // Reflow
+      preview.offsetHeight;
+      preview.classList.add('visible');
+    };
+
+    window.closeLargeImagePreview = function() {
+      const preview = document.getElementById('large-image-preview');
+      if (!preview) return;
+      preview.classList.remove('visible');
+      setTimeout(() => {
+        if (!preview.classList.contains('visible')) {
+          preview.style.display = 'none';
+        }
+      }, 300);
+    };
 
     init();
   </script>

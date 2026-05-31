@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 import os
-# Force XWayland (X11 compatibility layer) — works correctly on both
-# pure X11 and Wayland+XWayland sessions with pywebview.
-os.environ["GDK_BACKEND"] = "x11"
-os.environ["QT_QPA_PLATFORM"] = "xcb"
 import sys
 import socket
 import threading
@@ -25,7 +21,7 @@ def _setup_webview_backend():
         )
         if qt_available:
             os.environ["PYWEBVIEW_GUI"] = "qt"
-            os.environ["QT_QPA_PLATFORM"] = "xcb"  # Always use XCB via XWayland
+            os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force XCB via XWayland for Qt in pywebview
             return "qt"
     except Exception:
         pass
@@ -35,6 +31,8 @@ def _setup_webview_backend():
         import importlib
         if importlib.util.find_spec("gi") is not None:
             os.environ["PYWEBVIEW_GUI"] = "gtk"
+            if not wayland:
+                os.environ["GDK_BACKEND"] = "x11"
             return "gtk"
     except Exception:
         pass
@@ -62,7 +60,7 @@ def listen_udp(window):
     print("[Live2D Listener] Listening for speech triggers on 127.0.0.1:10088...")
     while True:
         try:
-            data, _ = sock.recvfrom(1024)
+            data, _ = sock.recvfrom(65536)
             msg = data.decode("utf-8").strip()
             if ":" in msg:
                 cmd, val = msg.split(":", 1)
@@ -77,6 +75,8 @@ def listen_udp(window):
                 window.evaluate_js(f'window.setEmotion("{val}");')
             elif cmd == "mouth":
                 window.evaluate_js(f'window.setMouth({val if val else 0.0});')
+            elif cmd == "mic_rms":
+                window.evaluate_js(f'window.setMicRMS({val if val else 0.0});')
             elif cmd == "state":
                 window.evaluate_js(f'window.setState("{val}");')
             elif cmd == "speech":
@@ -84,8 +84,39 @@ def listen_udp(window):
                 window.evaluate_js(f'window.addSpeechText("{safe_text}");')
             elif cmd == "interrupted":
                 window.evaluate_js('window.triggerInterruption();')
+            elif cmd == "search_results":
+                window.evaluate_js(f'window.showSearchHUD("{val}");')
+            elif cmd == "search_images":
+                window.evaluate_js(f'window.showImagesHUD("{val}");')
+            elif cmd == "terminal_command":
+                window.evaluate_js(f'window.updateTerminalHUD("{val}");')
+            elif cmd == "screen_capture":
+                window.evaluate_js(f'window.showScreenCaptureHUD("{val}");')
+            elif cmd == "screen_capture_complete":
+                window.evaluate_js('window.screenAnalysisComplete();')
+            elif cmd == "clear_huds":
+                window.evaluate_js('window.clearSearchHUDs();')
         except Exception:
             pass
+
+
+# UDP socket for sending text_input commands to the main pipeline
+_text_send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+class JSBridge:
+    """JavaScript API bridge exposed to pywebview. JS calls window.pywebview.api.send_text(text)."""
+
+    def send_text(self, text):
+        """Send typed text from the GUI prompt box to the main AI pipeline."""
+        if not text or not text.strip():
+            return
+        # Forward to main.py pipeline via a dedicated UDP message on port 10089
+        try:
+            _text_send_sock.sendto(f"text_input:{text}".encode("utf-8"), ("127.0.0.1", 10089))
+        except Exception as e:
+            print(f"[JSBridge] Error sending text: {e}")
+
+
 
 
 def main():
@@ -111,6 +142,9 @@ def main():
         except Exception:
             pass
 
+    # Create JS API bridge for text input from the prompt box
+    api = JSBridge()
+
     # Create the transparent viewport window
     window = webview.create_window(
         title='Live2D AI Companion',
@@ -120,7 +154,8 @@ def main():
         frameless=True,      # Discards window borders
         easy_drag=True,      # Enables dragging the face around
         transparent=True,    # Floating transparency
-        background_color='#000000'  # Hex triplet!
+        background_color='#000000',  # Hex triplet!
+        js_api=api,
     )
 
     def on_loaded():
@@ -132,8 +167,9 @@ def main():
     listener_thread = threading.Thread(target=listen_udp, args=(window,), daemon=True)
     listener_thread.start()
 
+
     # Start pywebview main GUI loop
-    webview.start(debug=True)
+    webview.start(debug=False)
 
 
 if __name__ == '__main__':
@@ -141,3 +177,4 @@ if __name__ == '__main__':
         main()
     except KeyboardInterrupt:
         sys.exit(0)
+

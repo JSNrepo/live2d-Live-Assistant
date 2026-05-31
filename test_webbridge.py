@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 try:
-    from main import (
+    from tools import (
         check_webbridge_active_sync,
         webbridge_navigate,
         webbridge_get_content,
@@ -16,7 +16,7 @@ try:
         webbridge_screenshot as webbridge_screenshot_sync
     )
 except ImportError as e:
-    print(f"Error importing from main.py: {e}")
+    print(f"Error importing from tools module: {e}")
     sys.exit(1)
 
 def print_banner():
