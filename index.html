@@ -2683,9 +2683,8 @@
       // Check current visualizer shape mode
       const live2d = activeConfig.live2d || {};
       const visualizerStyle = live2d.visualizer_style || 'linear';
-
-      const activeColorTheme = isInputMode ? 'rgba(0, 240, 255, 0.7)' : 'rgba(180, 0, 255, 0.7)';
-      const activeStrokeColor = isInputMode ? '#00f0ff' : '#ff007f';
+      const activeColorTheme = isInputMode ? 'rgba(0, 240, 255, 0.7)' : 'rgba(127, 0, 255, 0.7)';
+      const activeStrokeColor = isInputMode ? '#00f0ff' : '#007fff';
 
       if (visualizerStyle === 'circle') {
         // ==========================================
@@ -2697,7 +2696,7 @@
         
         const gradient = ctx.createRadialGradient(centerX, centerY, 5, centerX, centerY, rCenter);
         gradient.addColorStop(0, '#e8fcfd'); // glowing whitish-cyan core
-        gradient.addColorStop(0.3, isInputMode ? 'rgba(0, 240, 255, 0.35)' : 'rgba(180, 0, 255, 0.35)');
+        gradient.addColorStop(0.3, isInputMode ? 'rgba(0, 240, 255, 0.35)' : 'rgba(127, 0, 255, 0.35)');
         gradient.addColorStop(1.0, activeColorTheme);
         
         ctx.fillStyle = gradient;
@@ -2780,18 +2779,12 @@
             const hue = 185 + (i / totalTicks) * (225 - 185);
             tickColor = `hsla(${hue}, 95%, 62%, 0.88)`;
           } else {
-            // Symmetrical tri-color speaks gradient around the core: Violet (top/bottom) -> Neon Pink (diagonals) -> Neon Green (left/right sides)
+            // Symmetrical speaks gradient: Violet (top/bottom) -> Cyber Blue (left/right sides)
             const halfTicks = totalTicks / 2;
             const ratio = i < halfTicks ? (i / halfTicks) : ((totalTicks - i) / halfTicks);
-            if (ratio < 0.5) {
-              const t = ratio * 2;
-              const h = 275 + t * (330 - 275);
-              tickColor = `hsla(${h}, 100%, 60%, 0.88)`;
-            } else {
-              const t = (ratio - 0.5) * 2;
-              const h = (330 + t * 150) % 360;
-              tickColor = `hsla(${h}, 100%, 60%, 0.88)`;
-            }
+            // Blend from Violet HSL(275) to Cyber Blue HSL(215)
+            const h = 275 - ratio * 60;
+            tickColor = `hsla(${h}, 100%, 60%, 0.88)`;
           }
           
           ctx.strokeStyle = tickColor;
@@ -2850,7 +2843,7 @@
 
           ctx.shadowBlur = 6 + smoothedAudioFactor * 4.0;
           ctx.shadowColor = activeStrokeColor;
-          ctx.strokeStyle = isInputMode ? 'rgba(0, 240, 255, 0.4)' : 'rgba(180, 0, 255, 0.4)';
+          ctx.strokeStyle = isInputMode ? 'rgba(0, 240, 255, 0.4)' : 'rgba(127, 0, 255, 0.4)';
           ctx.lineWidth = 1.2 + smoothedAudioFactor * 0.8;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
@@ -2946,18 +2939,12 @@
             const hue = 185 + (i / numBars) * (225 - 185);
             barColor = `hsla(${hue}, 95%, 62%, 0.88)`;
           } else {
-            // Symmetrical tri-color speaks gradient: Violet (edges) -> Neon Pink -> Neon Green (center)
+            // Symmetrical speaks gradient: Violet (edges) -> Cyber Blue (center)
             const halfBars = (numBars - 1) / 2;
             const ratio = 1.0 - Math.abs(i - halfBars) / halfBars; // 0.0 at edges, 1.0 at center
-            if (ratio < 0.5) {
-              const t = ratio * 2;
-              const h = 275 + t * (330 - 275);
-              barColor = `hsla(${h}, 100%, 60%, 0.88)`;
-            } else {
-              const t = (ratio - 0.5) * 2;
-              const h = (330 + t * 150) % 360;
-              barColor = `hsla(${h}, 100%, 60%, 0.88)`;
-            }
+            // Blend from Violet HSL(275) at edges to Cyber Blue HSL(215) in the center
+            const h = 275 - ratio * 60;
+            barColor = `hsla(${h}, 100%, 60%, 0.88)`;
           }
 
           ctx.fillStyle = barColor;
@@ -2989,13 +2976,13 @@
 
       // High-tech annotations
       ctx.font = '8px monospace';
-      ctx.fillStyle = isInputMode ? 'rgba(0, 240, 255, 0.45)' : 'rgba(180, 0, 255, 0.45)';
+      ctx.fillStyle = isInputMode ? 'rgba(0, 240, 255, 0.45)' : 'rgba(127, 0, 255, 0.45)';
       ctx.fillText(isInputMode ? 'SYS_AUDIO_INPUT: ACTIVE' : 'SYS_AUDIO_INPUT: STANDBY', startX, centerY - 115);
       
       ctx.fillText(!isInputMode ? 'SYS_AUDIO_OUTPUT: ACTIVE' : 'SYS_AUDIO_OUTPUT: STANDBY', startX + totalWidth - 145, centerY - 115);
 
       // Cyber boundary bounding grid lines
-      ctx.strokeStyle = isInputMode ? 'rgba(0, 240, 255, 0.15)' : 'rgba(180, 0, 255, 0.15)';
+      ctx.strokeStyle = isInputMode ? 'rgba(0, 240, 255, 0.15)' : 'rgba(127, 0, 255, 0.15)';
       ctx.lineWidth = 1.0;
       ctx.beginPath();
       ctx.moveTo(startX, centerY - 108);
