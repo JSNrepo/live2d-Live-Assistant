@@ -1,5 +1,5 @@
 # LivePythonGemini — Sakura AI Companion
-
+(demo/thumbnail.png)
 An AI voice companion powered by **Google Gemini Live** with a Live2D animated
 character overlay, real-time audio processing, and an agentic tool layer for
 browser automation, file operations, system control, and web search.
@@ -16,11 +16,6 @@ Here is a visual demonstration of the Sakura AI Companion floating overlay, high
 ### Mode Toggling & Arc Reactor Ticks (Circle/Linear Styles)
 ![Demonstration of transitioning the overlay from the full Live2D character model to the linear and circular Arc Reactor visualizer configurations](demos/screencast_modes.webm)
 
-### Media & System Loopback Capture
-![Showcase of song controller activation, beat synchronization, and system audio loopback visualizer responses](demos/screencast_audio.mp4)
-
-### Interactive Full Session Demo
-![Comprehensive walk-through displaying the system listening, executing agentic commands, animating vocalizations, and rendering seamless transparency overlays](demos/screencast_full.mp4)
 
 ---
 
