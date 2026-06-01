@@ -1,4 +1,4 @@
-# LivePythonGemini — Sakura AI Companion
+# Hyori — Live2d desktop AI Companion
 
 An AI voice companion powered by **Google Gemini Live** with a Live2D animated
 character overlay, real-time audio processing, and an agentic tool layer for
