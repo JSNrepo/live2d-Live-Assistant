@@ -6,6 +6,24 @@ browser automation, file operations, system control, and web search.
 
 ---
 
+## Showcase
+
+Here is a visual demonstration of the Sakura AI Companion floating overlay, high-fidelity audio visualizers, and reactive interface:
+
+### UI Interface Overview
+![Sakura AI Companion Interface Overlay](/home/vinoth/.gemini/antigravity-ide/brain/ae3ce6a9-6ea8-418b-a224-1cf8245b8b24/media__1780292491841.jpg)
+
+### Mode Toggling & Arc Reactor Ticks (Circle/Linear Styles)
+![Demonstration of transitioning the overlay from the full Live2D character model to the linear and circular Arc Reactor visualizer configurations](/home/vinoth/.gemini/antigravity-ide/brain/ae3ce6a9-6ea8-418b-a224-1cf8245b8b24/screencast_modes.webm)
+
+### Media & System Loopback Capture
+![Showcase of song controller activation, beat synchronization, and system audio loopback visualizer responses](/home/vinoth/.gemini/antigravity-ide/brain/ae3ce6a9-6ea8-418b-a224-1cf8245b8b24/screencast_audio.mp4)
+
+### Interactive Full Session Demo
+![Comprehensive walk-through displaying the system listening, executing agentic commands, animating vocalizations, and rendering seamless transparency overlays](/home/vinoth/.gemini/antigravity-ide/brain/ae3ce6a9-6ea8-418b-a224-1cf8245b8b24/screencast_full.mp4)
+
+---
+
 ## Architecture
 
 ```

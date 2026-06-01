@@ -49,7 +49,7 @@ width = 950
 height = 700
 scale = 0.25
 y_offset = -20
-visualizer_enabled = false
+visualizer_enabled = true
 visualizer_style = "circle"
 
 [barge_in]
