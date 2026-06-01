@@ -5,16 +5,13 @@ character overlay, real-time audio processing, and an agentic tool layer for
 browser automation, file operations, system control, and web search.
 
 ---
+![Sakura AI Companion Interface Overlay](demos/thumbnail001.png)]
 
 ## Showcase
 
 Here is a visual demonstration of the Sakura AI Companion floating overlay, high-fidelity audio visualizers, and reactive interface:
+view on youtube https://youtu.be/dZQYgihwA54
 
-### UI Interface Overview
-![Sakura AI Companion Interface Overlay](demos/thumbnail001.png)
-
-### Mode Toggling & Arc Reactor Ticks (Circle/Linear Styles)
-<iframe width="1455" height="818" src="https://www.youtube.com/embed/dZQYgihwA54" title="live2d ai assistant for linux" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ---
 
 ## Architecture
