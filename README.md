@@ -14,8 +14,7 @@ Here is a visual demonstration of the Sakura AI Companion floating overlay, high
 ![Sakura AI Companion Interface Overlay](demos/thumbnail001.png)
 
 ### Mode Toggling & Arc Reactor Ticks (Circle/Linear Styles)
-<video src="demos/Screencast_20260601_111248.mp4" controls width="100%" poster="demos/thumbnail001.png" style="max-height: 480px; border-radius: 8px; margin-top: 8px;"></video>
-
+<iframe width="1455" height="818" src="https://www.youtube.com/embed/dZQYgihwA54" title="live2d ai assistant for linux" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 ---
 
 ## Architecture
