@@ -9,7 +9,7 @@ browser automation, file operations, system control, and web search.
 
 ## Showcase
 
-Here is a visual demonstration of the Sakura AI Companion floating overlay, high-fidelity audio visualizers, and reactive interface:
+Here is a visual demonstration of the Hyori AI Companion floating overlay, high-fidelity audio visualizers, and reactive interface:
 view on youtube https://youtu.be/dZQYgihwA54
 
 ---
