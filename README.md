@@ -14,7 +14,7 @@ Here is a visual demonstration of the Sakura AI Companion floating overlay, high
 ![Sakura AI Companion Interface Overlay](demos/thumbnail001.png)
 
 ### Mode Toggling & Arc Reactor Ticks (Circle/Linear Styles)
-![Demonstration of transitioning the overlay from the full Live2D character model to the linear and circular Arc Reactor visualizer configurations](demos/Screencast_20260601_000248.mp4)
+![Demonstration of transitioning the overlay from the full Live2D character model to the linear and circular Arc Reactor visualizer configurations](demos/Screencast_20260601_111248.mp4)
 
 
 ---
