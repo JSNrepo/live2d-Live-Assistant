@@ -19,3 +19,16 @@ retest-report.md
 skills-lock.json
 .continue/
 .claude/
+persona.txt
+
+# Runtime/temporary data
+session/
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE configurations
+.vscode/
+.idea/

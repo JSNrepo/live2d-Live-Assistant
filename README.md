@@ -65,60 +65,76 @@ view on youtube https://youtu.be/dZQYgihwA54
 | `run.sh` | Cross-distro launcher — auto-detects terminal emulator |
 | `run_live2d.sh` | Launches `live2d_gui.py` + `main.py --live2d` together |
 
-## Prerequisites
+## Installation & Setup
+
+We provide a distro-agnostic zero-dependency system installer script (`install.sh`) that automatically installs required packages (supporting `apt`, `dnf`, and `pacman`), provisions a virtual environment, and handles dependencies:
 
 ```bash
-# Python 3.11+
+# Clone the repository and execute the installer
+chmod +x install.sh
+./install.sh
+```
+
+### Manual Prerequisites
+
+If you prefer to configure the environment manually, ensure you have:
+- **Python 3.11+**
+- **System Packages:** `portaudio19-dev` / `portaudio-devel` (audio captures), `playerctl` (media HUD integrations), and a Pywebview backend (`python3-pyqt5` or `python3-gi`).
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Required system packages:
-- `portaudio19-dev` (PyAudio backend)
-- `python3-pyqt5` or `python3-gi` (pywebview GUI backend)
-- `playerctl` (optional — media control)
-- `psutil` (process monitoring)
+---
 
 ## Configuration
 
-Copy `.env.example` → `.env` and set your API keys:
+Copy `.env.example` → `.env` and set your active API keys:
 
-```
+```ini
 GOOGLE_API_KEY=your_key_here
 KIMI_WEBBRIDGE_API_KEY=your_key_here
 ```
 
-Edit `config.toml` to change voice, model names, pitch factor, noise gate, etc.
+Edit `config.toml` to customize voice indices, LLM models, pitch shifting factors, noise gate thresholds, etc.
 
-## Running
+---
+
+## Running the Assistant
+
+Sakura supports multiple runtime modes out of the box:
 
 ```bash
-# Full mode with Live2D overlay
+# 1. Full Mode (Glow HUD + Transparent WebGL Live2D Overlay)
 ./run_live2d.sh
 
-# Terminal-only (no GUI)
+# 2. Curses TUI-only Mode (Lightweight Terminal Session)
 ./run.sh
 
-# Or directly
+# 3. Direct execution
 .venv/bin/python main.py
-.venv/bin/python main.py --live2d
 ```
 
-## Audio Pipeline
+---
 
-Gemini Realtime API delivers PCM audio at 24 kHz / 16-bit mono.
-`play_audio()` applies a vectorised pitch shift (scipy FFT resample)
-to raise the voice pitch by the configured `pitch_factor`, then streams
-the result to PyAudio in 20ms sub-chunks for low-latency lip-sync.
+## Premium Visualizer & Media Features
 
-## Tool Capabilities
+1. **Ultra-Compact Single-Row Media HUD:**
+   - Grouped Prev, Play/Pause, and Next buttons on the left, perfectly aligned near the neon canvas trace connection point (`rect.left`).
+   - A dynamic progress seek bar with a high-tech glowing background stretching to occupy all remaining right-side space (`flex: 1`).
+   - Integrates click-to-seek to jump directly to any track timestamp.
 
-- **Web search** — DuckDuckGo Lite + Wikipedia API fallback
-- **Browser automation** — Kimi WebBridge (open tabs, click, fill, scroll)
-- **Terminal** — run commands with confirmation for destructive ops
-- **Applications** — launch any app, DE-aware for GNOME/KDE/XFCE/MATE/LXQt
-- **Media** — playerctl integration (play/pause/next/volume)
-- **Memory** — persistent JSON knowledge graph
-- **Screen** — periodic screenshot analysis via Gemini Vision
-- **System** — CPU/RAM/disk monitoring with threshold alerts
+2. **Screen-Safe Audio Reactor Ticks:**
+   - **Linear Mode:** Generates symmetrical bell-curved spectrum equalizers with high-amplitude peak sways that are clamped to `75px` to keep layouts beautiful.
+   - **Circle Mode:** Draws rotating concentric arc reactors with radial dash spikes scaled to `24.0` multiplier, pulsing dynamically without overlapping background windows.
+   - **Vigorous Sensitivity:** Features high-fidelity loopback RMS scale factors (`currentMicRMS / 650.0`) and synthesized idle beats that capture every detail of active songs.
+
+3. **Smart Command Auto-Execution:**
+   - Overhauled command security filters (`tools/system.py`) to stop demanding user confirmation for safe utility, developer, and query commands (such as `pytest`, `ls -la`, `git status`).
+   - Retains bulletproof protection strictly for destructive, irrevocable terminal actions (like `rm -rf`, `dd if=`, `sudo rm`, and `pkill -9`). Non-disruptive commands run smoothly and instantly!
+
+4. **Beat-Reactive procedural Dancing:**
+   - PIXI app overrides procedure nod angles, eyeball drift, and symmetrical body sways synced to active sound inputs.
+   - Restricts arm waving loops to a high baseline so Hiyori stays dancing elegantly without jerky resets to neutral!

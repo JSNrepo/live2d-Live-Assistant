@@ -15,6 +15,8 @@
   <!-- Load Google Font Inter -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    * { box-sizing: border-box; outline: none !important; -webkit-tap-highlight-color: transparent; }
+    *:focus, *:active, button:focus, button:active, div:focus, div:active { outline: none !important; border: none !important; box-shadow: none !important; }
     body { margin: 0; overflow: hidden; background: transparent; user-select: none; -webkit-user-select: none; }
     @keyframes scifi-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     @keyframes scifi-spin-reverse { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
@@ -25,6 +27,8 @@
     @keyframes aura-particle-drift { 0%, 100% { box-shadow: 0 0 10px var(--vibe-color, rgba(0, 240, 255, 0.3)), inset 0 0 5px var(--vibe-color, rgba(0, 240, 255, 0.2)); } 33% { box-shadow: 0 0 16px var(--vibe-color, rgba(0, 240, 255, 0.5)), inset 0 0 8px var(--vibe-color, rgba(0, 240, 255, 0.3)), 3px -3px 6px rgba(0, 240, 255, 0.15); } 66% { box-shadow: 0 0 12px var(--vibe-color, rgba(0, 240, 255, 0.4)), inset 0 0 6px var(--vibe-color, rgba(0, 240, 255, 0.25)), -3px 3px 6px rgba(0, 200, 255, 0.1); } }
     @keyframes slide-up-in { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
     @keyframes slide-down-out { from { transform: translateX(-50%) translateY(0); opacity: 1; } to { transform: translateX(-50%) translateY(20px); opacity: 0; } }
+    @keyframes prompt-slide-up-in { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes prompt-slide-down-out { from { transform: translateY(0); opacity: 1; } to { transform: translateY(20px); opacity: 0; } }
     @keyframes scan-anim { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
     @keyframes pulse-anim { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
 
@@ -135,12 +139,21 @@
     .search-item-icon svg { width: 12px; height: 12px; fill: none; stroke: #00f0ff; stroke-width: 2; }
     .search-item-title { font-size: 10px; font-weight: 600; color: #00f0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Inter', sans-serif; }
     .search-item-snippet { font-size: 8px; color: rgba(224, 247, 252, 0.7); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; font-family: 'Inter', sans-serif; }
-    .search-item-domain { font-size: 7px; color: rgba(0, 240, 255, 0.5); font-family: monospace; text-align: right; margin-top: 1px; }
+    .music-btn {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .music-btn:hover {
+      transform: scale(1.22) !important;
+      filter: drop-shadow(0 0 8px #00f0ff);
+    }
+    .music-btn:active {
+      transform: scale(0.92) !important;
+    }
 
-    #prompt-container { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 90vw; z-index: 2000; pointer-events: auto; display: none; filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.4)); }
-    #prompt-container.visible { display: block; animation: slide-up-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
-    #prompt-container.hiding { animation: slide-down-out 0.25s cubic-bezier(0.7, 0, 0.84, 0) both; }
-    #prompt-card { width: 100%; box-sizing: border-box; background: linear-gradient(135deg, rgba(0, 240, 255, 0.75), rgba(0, 120, 255, 0.3)); padding: 1.5px; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+    #prompt-container { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 90vw; z-index: 2000; pointer-events: none; display: block; filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.4)); }
+    #prompt-card { width: 100%; box-sizing: border-box; background: linear-gradient(135deg, rgba(0, 240, 255, 0.75), rgba(0, 120, 255, 0.3)); padding: 1.5px; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); pointer-events: auto; display: none; }
+    #prompt-card.visible { display: block; animation: prompt-slide-up-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    #prompt-card.hiding { animation: prompt-slide-down-out 0.25s cubic-bezier(0.7, 0, 0.84, 0) both; }
     #prompt-inner { width: 100%; box-sizing: border-box; background: rgba(4, 10, 18, 0.96); backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5); padding: 10px 14px; display: flex; align-items: center; gap: 10px; clip-path: polygon(0 0, calc(100% - 12.5px) 0, 100% 12.5px, 100% 100%, 12.5px 100%, 0 calc(100% - 12.5px)); box-shadow: inset 0 0 12px rgba(0, 240, 255, 0.1); }
     #prompt-label { font-size: 8px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(0, 240, 255, 0.5); font-family: 'Courier New', monospace; font-weight: 700; flex-shrink: 0; }
     #prompt-input { flex: 1; background: rgba(0, 15, 25, 0.6); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 4px; color: #e0f7fc; font-size: 12px; font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 500; padding: 8px 12px; outline: none; transition: border-color 0.3s ease, box-shadow 0.3s ease; caret-color: #00f0ff; }
@@ -878,6 +891,35 @@
 
   <!-- Prompt input container (Quiet Mode) -->
   <div id="prompt-container">
+    <!-- Floating Media Controller Bar (visible when media is active) -->
+    <div id="music-hud" class="hud-box" style="margin-bottom: 12px; display: none; filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.35)); width: 100%;">
+      <div style="display: flex; flex-direction: row; align-items: center; gap: 14px; width: 100%; background: none; border: none; padding: 0 4px; box-shadow: none;">
+        
+        <!-- Interactive Buttons Row -->
+        <div class="music-buttons" style="display: flex; gap: 16px; align-items: center; flex-shrink: 0;">
+          <!-- Previous Button -->
+          <button class="music-btn" onclick="controlMedia('previous')" title="Previous Track" style="background: none; border: none; outline: none !important; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; transition: all 0.3s ease;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px #00f0ff);"><polygon points="19 20 9 12 19 4 19 20" fill="rgba(0, 240, 255, 0.15)"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+          </button>
+          
+          <!-- Play/Pause Button -->
+          <button class="music-btn" onclick="controlMedia('toggle')" title="Play / Pause" style="background: none; border: none; outline: none !important; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; transition: all 0.3s ease; transform: scale(1.1);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px #00f0ff);" id="music-play-pause-icon"><rect x="6" y="4" width="4" height="16" fill="rgba(0, 240, 255, 0.15)"></rect><rect x="14" y="4" width="4" height="16" fill="rgba(0, 240, 255, 0.15)"></rect></svg>
+          </button>
+          
+          <!-- Next Button -->
+          <button class="music-btn" onclick="controlMedia('next')" title="Next Track" style="background: none; border: none; outline: none !important; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; transition: all 0.3s ease;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px #00f0ff);"><polygon points="5 4 15 12 5 20 5 4" fill="rgba(0, 240, 255, 0.15)"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+          </button>
+        </div>
+
+        <!-- Floating Custom Progress Bar -->
+        <div class="music-progress-bar-container" style="flex: 1; height: 6px; background: rgba(0, 240, 255, 0.12); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 3px; overflow: hidden; position: relative; cursor: pointer; filter: drop-shadow(0 0 4px rgba(0, 240, 255, 0.4)); transition: all 0.3s ease;" id="music-progress-bar-click">
+          <div id="music-progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #b400ff, #00f0ff); transition: width 0.15s linear;"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="prompt-card">
       <div id="prompt-inner">
         <span id="prompt-label">INPUT_PROMPT:</span>
@@ -1265,6 +1307,15 @@
         try { browLFormIdx = core.getParameterIndex('ParamBrowLForm'); } catch(e){}
         try { browRFormIdx = core.getParameterIndex('ParamBrowRForm'); } catch(e){}
 
+        let bodyXIdx = -1, bodyYIdx = -1, bodyZIdx = -1;
+        try { bodyXIdx = core.getParameterIndex('ParamBodyAngleX'); } catch(e){}
+        try { bodyYIdx = core.getParameterIndex('ParamBodyAngleY'); } catch(e){}
+        try { bodyZIdx = core.getParameterIndex('ParamBodyAngleZ'); } catch(e){}
+
+        let armLAIdx = -1, armRAIdx = -1;
+        try { armLAIdx = core.getParameterIndex('ParamArmLA'); } catch(e){}
+        try { armRAIdx = core.getParameterIndex('ParamArmRA'); } catch(e){}
+
         let lastSpeakingMotionTime = 0;
 
         // Perform all model updates and overrides manually inside PIXI Ticker
@@ -1454,10 +1505,49 @@
           let danceX = 0;
           let danceY = 0;
           let danceZ = 0;
+          let danceBodyX = 0;
+          let danceBodyY = 0;
+          let danceBodyZ = 0;
+          let danceEyeballX = 0;
+          let danceEyeballY = 0;
+          let danceArmLA = 0;
+          let danceArmRA = 0;
 
           // React to microphone input, system audio monitor, or speaker voice output
           const activeAudioLevel = Math.max(currentMicRMS, currentMouth * 8000.0);
-          if (activeAudioLevel > 180.0) {
+          const isVibingToMusic = (currentEmotion === 'vibing');
+
+          if (isVibingToMusic) {
+            // Vibing to music! Extremely dynamic and rhythmic beat-reactive procedural dance!
+            const danceTime = Date.now() / 120; // Beautiful rhythmic dance tempo
+            
+            // Extract the dynamic beat factor from the music amplitude (RMS)
+            const beatFactor = Math.min(1.5, activeAudioLevel / 1200.0);
+            
+            // Hard beats cause sharp head nod and body sway, melody sways hands smoothly
+            const nodIntensity = 0.45 + beatFactor * 0.85; 
+            const swayIntensity = 0.55 + beatFactor * 0.75;
+            
+            // 1. Nod head according to beat/melody
+            danceX = Math.sin(danceTime) * 16.0 * swayIntensity;
+            danceY = -Math.abs(Math.cos(danceTime * 2.0)) * 14.0 * nodIntensity; // Head nods down on beats
+            danceZ = Math.sin(danceTime * 1.5) * 10.0 * swayIntensity; // Roll/swivel sway
+
+            // 2. Move body according to beat/melody
+            danceBodyX = Math.sin(danceTime * 0.8) * 9.0 * swayIntensity;
+            danceBodyY = Math.sin(danceTime * 1.6) * 4.0 * nodIntensity;
+            danceBodyZ = Math.cos(danceTime * 0.8) * 8.0 * swayIntensity;
+
+            // 3. Move eyeballs according to beat/melody
+            danceEyeballX = Math.sin(danceTime * 0.55) * 0.22 * swayIntensity;
+            danceEyeballY = Math.cos(danceTime * 0.55) * 0.15 * nodIntensity;
+
+            // 4. Procedural arm and hand waving!
+            // Symmetrical high waving hands that NEVER lower to neutral while vibing!
+            // Baseline 7.5 guarantees the arms stay raised and loop smoothly between 5.0 and 10.0
+            danceArmLA = 7.5 + Math.sin(danceTime * 1.2) * 2.5 * swayIntensity;
+            danceArmRA = 7.5 + Math.cos(danceTime * 1.2) * 2.5 * swayIntensity;
+          } else if (activeAudioLevel > 180.0) {
             const danceTime = Date.now() / 150; // Dynamic tempo speed
             const intensity = Math.min(1.0, activeAudioLevel / 6500.0); // Damping intensity
 
@@ -1539,12 +1629,45 @@
             core.setParameterValueByIndex(browRFormIdx, currentRenderedBrowRForm);
           }
 
-          // 8. Apply state-based parameter overrides
+           // 8. Apply state-based parameter overrides
           if (eyeballXOverride !== null) {
             core.setParameterValueByIndex(eyeballXIdx, eyeballXOverride);
+          } else if (danceEyeballX !== 0) {
+            core.setParameterValueByIndex(eyeballXIdx, danceEyeballX);
           }
           if (eyeballYOverride !== null) {
             core.setParameterValueByIndex(eyeballYIdx, eyeballYOverride);
+          } else if (danceEyeballY !== 0) {
+            core.setParameterValueByIndex(eyeballYIdx, danceEyeballY);
+          }
+
+          // Apply body dynamic sways
+          if (bodyXIdx >= 0) {
+            let curBodyX = core.getParameterValueByIndex(bodyXIdx);
+            let blendBodyX = curBodyX + (danceBodyX - curBodyX) * 0.12;
+            core.setParameterValueByIndex(bodyXIdx, blendBodyX);
+          }
+          if (bodyYIdx >= 0) {
+            let curBodyY = core.getParameterValueByIndex(bodyYIdx);
+            let blendBodyY = curBodyY + (danceBodyY - curBodyY) * 0.12;
+            core.setParameterValueByIndex(bodyYIdx, blendBodyY);
+          }
+          if (bodyZIdx >= 0) {
+            let curBodyZ = core.getParameterValueByIndex(bodyZIdx);
+            let blendBodyZ = curBodyZ + (danceBodyZ - curBodyZ) * 0.12;
+            core.setParameterValueByIndex(bodyZIdx, blendBodyZ);
+          }
+
+          // Apply arm dynamic sways (Waving hands!)
+          if (armLAIdx >= 0) {
+            let curArmLA = core.getParameterValueByIndex(armLAIdx);
+            let blendArmLA = curArmLA + (danceArmLA - curArmLA) * 0.12;
+            core.setParameterValueByIndex(armLAIdx, blendArmLA);
+          }
+          if (armRAIdx >= 0) {
+            let curArmRA = core.getParameterValueByIndex(armRAIdx);
+            let blendArmRA = curArmRA + (danceArmRA - curArmRA) * 0.12;
+            core.setParameterValueByIndex(armRAIdx, blendArmRA);
           }
 
           // 9. Apply lip sync volume adjusted by Viseme Scale
@@ -2095,6 +2218,119 @@
       if (hudStatus) hudStatus.textContent = "ONLINE";
     };
 
+    window.controlMedia = function(action) {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.control_media) {
+        window.pywebview.api.control_media(action).then(res => {
+          console.log("Media control action response: ", res);
+        });
+      }
+    };
+
+    window.updateMusicHUD = function(dataStr) {
+      window.currentMusicStatus = dataStr;
+      
+      const musicHud = document.getElementById('music-hud');
+      if (!musicHud) return;
+
+      const musicStatus = document.getElementById('music-status');
+      const playPauseIcon = document.getElementById('music-play-pause-icon');
+      const musicDot = document.getElementById('music-dot');
+      const trackInfo = document.getElementById('music-track-info');
+      const timeIndicator = document.getElementById('music-time-indicator');
+      const progressBarFill = document.getElementById('music-progress-bar-fill');
+
+      let meta = null;
+      let status = dataStr;
+
+      if (dataStr.trim().startsWith('{')) {
+        try {
+          meta = JSON.parse(dataStr);
+          status = meta.status;
+        } catch (e) {
+          console.error("Error parsing music metadata JSON:", e);
+        }
+      }
+
+      const shouldShow = (status === 'playing' || status === 'paused') && visualizerActive;
+
+      if (shouldShow) {
+        // Ensure container is displayed
+        if (musicHud.style.display === 'none' || !musicHud.classList.contains('visible')) {
+          musicHud.style.display = 'block';
+          void musicHud.offsetWidth; // Trigger reflow
+        }
+        
+        musicHud.classList.add('visible');
+
+        if (status === 'playing') {
+          if (musicStatus) musicStatus.textContent = "PLAYING";
+          if (musicDot) {
+            musicDot.className = "hud-dot green";
+            musicDot.style.backgroundColor = "#34c759";
+            musicDot.style.boxShadow = "0 0 6px #34c759";
+          }
+          if (playPauseIcon) {
+            playPauseIcon.innerHTML = '<rect x="6" y="4" width="4" height="16" fill="rgba(0, 240, 255, 0.15)"></rect><rect x="14" y="4" width="4" height="16" fill="rgba(0, 240, 255, 0.15)"></rect>';
+          }
+        } else {
+          if (musicStatus) musicStatus.textContent = "PAUSED";
+          if (musicDot) {
+            musicDot.className = "hud-dot yellow";
+            musicDot.style.backgroundColor = "#ffcc00";
+            musicDot.style.boxShadow = "0 0 6px #ffcc00";
+          }
+          if (playPauseIcon) {
+            playPauseIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3" fill="rgba(0, 240, 255, 0.15)"></polygon>';
+          }
+        }
+
+        // Handle meta variables
+        if (meta) {
+          // Update track title and artist
+          if (trackInfo) {
+            const trackText = (meta.title || meta.artist) 
+              ? `🎵 ${meta.title} ${meta.artist ? ' - ' + meta.artist : ''}`
+              : "🎵 SYSTEM AUDIO STREAM";
+            trackInfo.textContent = trackText;
+          }
+
+          // Store current track length globally
+          window.currentTrackLength = meta.length;
+
+          // Update elapsed and total track time indicators
+          if (timeIndicator) {
+            const formatTime = (secs) => {
+              if (isNaN(secs) || secs < 0) return "0:00";
+              const m = Math.floor(secs / 60);
+              const s = Math.floor(secs % 60);
+              return m + ":" + (s < 10 ? "0" : "") + s;
+            };
+            timeIndicator.textContent = `${formatTime(meta.position)} / ${formatTime(meta.length)}`;
+          }
+
+          // Update progress bar percentage fill
+          if (progressBarFill) {
+            const pct = meta.length > 0 ? Math.max(0, Math.min(100, (meta.position / meta.length) * 100)) : 0;
+            progressBarFill.style.width = `${pct}%`;
+          }
+        }
+      } else {
+        // Status is 'idle' or stopped, slide it away smoothly
+        musicHud.classList.remove('visible', 'active-glitch');
+        if (musicStatus) musicStatus.textContent = "STANDBY";
+        if (musicDot) {
+          musicDot.className = "hud-dot yellow";
+          musicDot.style.backgroundColor = "#ffcc00";
+          musicDot.style.boxShadow = "0 0 6px #ffcc00";
+        }
+        setTimeout(() => {
+          if (!musicHud.classList.contains('visible')) {
+            musicHud.style.display = 'none';
+          }
+        }, 400);
+      }
+    };
+
     window.clearSearchHUDs = function() {
       // Return columns back from push away state when HUD is cleared
       const leftHud = document.getElementById('left-hud');
@@ -2170,29 +2406,29 @@
     }
 
     // Toggle Prompt Input Box
-    const promptContainer = document.getElementById('prompt-container');
+    const promptCard = document.getElementById('prompt-card');
     const promptInput = document.getElementById('prompt-input');
     const promptToggleBtn = document.getElementById('prompt-toggle-btn');
     const promptSendBtn = document.getElementById('prompt-send-btn');
 
     function togglePromptBox() {
-      if (!promptContainer) return;
-      if (promptContainer.classList.contains('visible')) {
-        promptContainer.classList.remove('visible');
-        promptContainer.classList.add('hiding');
+      if (!promptCard) return;
+      if (promptCard.classList.contains('visible')) {
+        promptCard.classList.remove('visible');
+        promptCard.classList.add('hiding');
         if (promptToggleBtn) promptToggleBtn.classList.remove('active');
         // Wait for slide-down animation to complete before display: none
         setTimeout(() => {
-          if (promptContainer.classList.contains('hiding')) {
-            promptContainer.style.display = 'none';
+          if (promptCard.classList.contains('hiding')) {
+            promptCard.style.display = 'none';
           }
         }, 250);
       } else {
-        promptContainer.style.display = 'block';
+        promptCard.style.display = 'block';
         // Trigger reflow to ensure slide-up animation runs smoothly
-        promptContainer.offsetHeight;
-        promptContainer.classList.remove('hiding');
-        promptContainer.classList.add('visible');
+        promptCard.offsetHeight;
+        promptCard.classList.remove('hiding');
+        promptCard.classList.add('visible');
         if (promptToggleBtn) promptToggleBtn.classList.add('active');
         promptInput.focus();
       }
@@ -2222,6 +2458,21 @@
 
     if (promptSendBtn) {
       promptSendBtn.addEventListener('click', sendTextPrompt);
+    }
+
+    const progressBarClick = document.getElementById('music-progress-bar-click');
+    if (progressBarClick) {
+      progressBarClick.addEventListener('click', function(e) {
+        const rect = progressBarClick.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const width = rect.width;
+        const percentage = Math.max(0, Math.min(1, clickX / width));
+        
+        if (window.currentTrackLength && window.currentTrackLength > 0) {
+          const targetSeconds = percentage * window.currentTrackLength;
+          window.controlMedia('seek_to:' + targetSeconds);
+        }
+      });
     }
 
     if (promptInput) {
@@ -2616,6 +2867,11 @@
         if (live2dModel) live2dModel.visible = true; // Re-enable Pixi WebGL draw cycles
         stopVisualizerRenderLoop();
       }
+
+      // Refresh music HUD visibility dynamically based on active visualizer mode!
+      if (window.currentMusicStatus) {
+        window.updateMusicHUD(window.currentMusicStatus);
+      }
     };
 
     function startVisualizerRenderLoop() {
@@ -2664,17 +2920,28 @@
 
       // Determine active voice factor and color scheme
       const isSpeaking = (currentState === 'SPEAKING' && currentMouth > 0.05);
-      const isInputActive = (currentMicRMS > 180.0);
+      const isInputActive = (currentMicRMS > 100.0); // lower threshold for high sensitivity
+      const isVibing = (currentEmotion === 'vibing');
       
       let audioFactor = 0.0;
       let isInputMode = true;
       
       if (isSpeaking) {
-        audioFactor = currentMouth * 4.5;
+        audioFactor = currentMouth * 5.0;
         isInputMode = false;
       } else if (isInputActive) {
-        audioFactor = currentMicRMS / 1800.0;
+        audioFactor = currentMicRMS / 650.0; // highly sensitive scale
         isInputMode = true;
+      } else if (isVibing) {
+        // SYNTHESIZE A DYNAMIC SPECTRAL WAVEFORM DRIVE IF CAPTURE SILENT!
+        // Combine a rhythmic 140 BPM beat spike with minor melodic accent variations
+        const tempo = visTime * 2.8;
+        const beatBase = Math.abs(Math.sin(tempo));
+        const accentBeat = Math.pow(Math.abs(Math.sin(tempo / 2)), 4.0) * 0.45;
+        const melody = Math.sin(visTime * 4.5) * 0.18 + Math.cos(visTime * 8.2) * 0.1;
+        
+        audioFactor = 0.5 + beatBase * 1.35 + accentBeat * 2.2 + melody * 1.5;
+        isInputMode = true; // Use glowing Cyber Blue theme for music!
       }
 
       // Buttery-smooth liquid volume interpolation
@@ -2764,7 +3031,7 @@
           
           // Symmetrical dynamic visualizer spectrum pulsing
           const freqMod = 0.35 + 0.65 * Math.abs(Math.sin(visTime * 3.0 + i * 0.4) * Math.cos(visTime * 1.2 - i * 0.2));
-          const targetLength = 5 + Math.max(0, smoothedAudioFactor * 16.0 * freqMod + Math.sin(visTime * 1.5 + i * 0.25) * 2.0);
+          const targetLength = 5 + Math.max(0, smoothedAudioFactor * 24.0 * freqMod + Math.sin(visTime * 1.5 + i * 0.25) * 1.5);
           // Apply individual tick length smoothing
           circleTickLengths[i] += (targetLength - circleTickLengths[i]) * 0.22;
           const tickLength = circleTickLengths[i];
@@ -2801,7 +3068,8 @@
           { id: 'speech-container', side: 'left' },
           { id: 'image-results-hud', side: 'left' },
           { id: 'terminal-hud', side: 'left' },
-          { id: 'web-search-hud', side: 'right' }
+          { id: 'web-search-hud', side: 'right' },
+          { id: 'music-hud', side: 'right' }
         ];
 
         connectItems.forEach(item => {
@@ -2809,8 +3077,10 @@
           if (!el) return;
 
           const rect = el.getBoundingClientRect();
-          // Bulletproof check: visible when panel has class 'visible' and has non-zero layout
-          const isVisible = el.classList.contains('visible') && rect.width > 0 && rect.height > 0;
+          // Bulletproof check: visible when panel has class 'visible', has non-zero layout, and is not transparent!
+          const computedStyle = window.getComputedStyle(el);
+          const opacity = parseFloat(computedStyle.opacity);
+          const isVisible = el.classList.contains('visible') && rect.width > 0 && rect.height > 0 && opacity > 0.1;
           if (!isVisible) return;
 
           // Compute connection point on the edge of the panel
@@ -2928,10 +3198,10 @@
           const idleBreathing = Math.sin(visTime + i * 0.28) * 4.0 + Math.cos(visTime * 0.75 + i * 0.15) * 2.0;
 
           // Calculated bar height modulated by active voice levels
-          const targetHeight = 4 + Math.max(0, smoothedAudioFactor * 24.0 * waveScale * freqMod + idleBreathing * waveScale);
+          const targetHeight = 4 + Math.max(0, smoothedAudioFactor * 45.0 * waveScale * freqMod + idleBreathing * waveScale);
           // Apply individual spectrum bar height smoothing
           linearBarHeights[i] += (targetHeight - linearBarHeights[i]) * 0.22;
-          let barHeight = Math.min(90, linearBarHeights[i]);
+          let barHeight = Math.min(75, linearBarHeights[i]);
 
           // Dynamic color-coding based on conversation state
           let barColor;

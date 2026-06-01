@@ -43,6 +43,12 @@ def control_browser_media(action: str) -> dict:
         cmd = ["playerctl", "position", "10+"]
     elif action == "seek_backward":
         cmd = ["playerctl", "position", "10-"]
+    elif action.startswith("seek_to:"):
+        try:
+            target_secs = float(action.split(":", 1)[1])
+            cmd = ["playerctl", "position", str(target_secs)]
+        except Exception as e:
+            return {"error": f"Failed to parse seek position: {str(e)}"}
     else:
         return {"error": f"Unknown action: '{action}'."}
 
@@ -94,21 +100,90 @@ def open_browser(url: str) -> dict:
     return {"status": f"Successfully opened and navigated to '{url}' in default local browser (fallback)."}
 
 
-async def check_music_playing() -> bool:
+import json
+
+async def check_music_playing() -> str:
+    meta = await check_music_metadata()
+    return meta["status"]
+
+async def check_music_metadata() -> dict:
     try:
-        proc = await asyncio.create_subprocess_exec(
+        proc_status = await asyncio.create_subprocess_exec(
             "playerctl",
             "status",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate()
-        result = b"Playing" in stdout
-        log.debug("check_music %s", result)
-        return result
+        stdout, _ = await proc_status.communicate()
+        status_str = stdout.decode("utf-8").strip()
+        
+        if not status_str or "No players found" in status_str:
+            return {"status": "idle", "position": 0, "length": 0, "title": "", "artist": ""}
+            
+        status = "playing" if "Playing" in status_str else ("paused" if "Paused" in status_str else "idle")
+        if status == "idle":
+            return {"status": "idle", "position": 0, "length": 0, "title": "", "artist": ""}
+            
+        # Get position (returns seconds as float)
+        proc_pos = await asyncio.create_subprocess_exec(
+            "playerctl",
+            "position",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_pos, _ = await proc_pos.communicate()
+        try:
+            position = float(stdout_pos.decode("utf-8").strip())
+        except ValueError:
+            position = 0.0
+            
+        # Get length (mpris:length is in microseconds)
+        proc_len = await asyncio.create_subprocess_exec(
+            "playerctl",
+            "metadata",
+            "mpris:length",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_len, _ = await proc_len.communicate()
+        try:
+            length_us = float(stdout_len.decode("utf-8").strip())
+            length = length_us / 1000000.0
+        except ValueError:
+            length = 0.0
+            
+        # Get title
+        proc_title = await asyncio.create_subprocess_exec(
+            "playerctl",
+            "metadata",
+            "xesam:title",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_title, _ = await proc_title.communicate()
+        title = stdout_title.decode("utf-8").strip()
+        
+        # Get artist
+        proc_artist = await asyncio.create_subprocess_exec(
+            "playerctl",
+            "metadata",
+            "xesam:artist",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_artist, _ = await proc_artist.communicate()
+        artist = stdout_artist.decode("utf-8").strip()
+        
+        return {
+            "status": status,
+            "position": position,
+            "length": length,
+            "title": title,
+            "artist": artist
+        }
     except Exception as e:
-        log.debug("check_music err %s", e)
-        return False
+        log.debug("check_music_metadata err %s", e)
+        return {"status": "idle", "position": 0, "length": 0, "title": "", "artist": ""}
 
 
 async def monitor_music_and_vibe(session):
@@ -117,13 +192,31 @@ async def monitor_music_and_vibe(session):
         log.debug("monitor_music disabled (playerctl absent)")
         return
     while True:
+        sleep_delay = 2.0
         try:
-            is_playing = await check_music_playing()
+            meta = await check_music_metadata()
+            music_status = meta["status"]
+            
+            try:
+                import socket
+                _gui_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                
+                # Broadcast compatibility string
+                _gui_sock.sendto(f"music:{music_status}".encode("utf-8"), ("127.0.0.1", 10088))
+                
+                # Broadcast rich JSON metadata
+                meta_json = json.dumps(meta)
+                _gui_sock.sendto(f"music_meta:{meta_json}".encode("utf-8"), ("127.0.0.1", 10088))
+            except Exception:
+                pass
+                
             with ui_lock:
                 current_state = ui.state
                 current_emotion = ui.emotion
 
+            is_playing = (music_status == "playing")
             if is_playing:
+                sleep_delay = 0.5  # Poll faster (500ms) when playing to keep progress bars completely smooth!
                 if current_state in (
                     AppState.LISTENING,
                     AppState.SLEEPING,
@@ -131,10 +224,12 @@ async def monitor_music_and_vibe(session):
                     log.debug("monitor_music vibing")
                     set_state(AppState.LISTENING, "vibing", "Vibing to music...")
             else:
+                sleep_delay = 2.0  # Poll slower (2.0s) in standby/paused modes to save CPU
                 if current_emotion == "vibing":
                     log.debug("monitor_music idle")
                     set_state(AppState.LISTENING, "idle", "Listening...")
         except Exception as e:
             log.debug("monitor_music err %s", e)
             pass
-        await asyncio.sleep(2.0)
+        await asyncio.sleep(sleep_delay)
+

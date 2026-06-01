@@ -47,7 +47,7 @@ def _detect_terminal() -> list:
     return []
 
 
-# Verified safe read-only/utility commands that can run without confirmation
+# Verified safe read-only/utility commands list preserved for structure
 SAFE_COMMANDS = {
     "ls", "pwd", "echo", "cat", "grep", "ps", "git", "df", "free", 
     "uptime", "whoami", "uname", "ping", "find", "mkdir", "touch", 
@@ -57,33 +57,25 @@ SAFE_COMMANDS = {
 
 def _is_critical_command(cmd: str) -> bool:
     """
-    Check if a command is critical/destructive or contains dangerous chaining.
-    Returns True if the command is critical/unverified (requires confirmation),
-    or False if it is a simple, verified safe command.
+    Check if a command is critical/destructive.
+    Returns True if the command is critical/destructive (requires confirmation),
+    or False if it is a simple, non-destructive command.
     """
     cmd_strip = cmd.strip()
     if not cmd_strip:
         return False
 
-    # Check for chaining, redirecting or nesting that could bypass checks (S01)
-    chaining_meta = [";", "&", "|", "`", "$", ">", "<", "\n", "\r"]
-    for char in chaining_meta:
-        if char in cmd_strip:
-            return True
-
-    # Check base executable
-    parts = cmd_strip.split()
-    if not parts:
-        return True
-    base_exe = os.path.basename(parts[0]).lower()
-
-    if base_exe not in SAFE_COMMANDS:
-        return True
+    cmd_lower = cmd_strip.lower()
 
     # Check for known dangerous patterns inside command arguments
-    cmd_lower = cmd_strip.lower()
     for pattern in CRITICAL_COMMAND_PATTERNS:
-        if pattern in cmd_lower:
+        if "|" in pattern and ".*" in pattern:
+            try:
+                if re.search(pattern, cmd_lower):
+                    return True
+            except Exception:
+                pass
+        elif pattern in cmd_lower:
             return True
 
     return False

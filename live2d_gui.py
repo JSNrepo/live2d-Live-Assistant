@@ -96,6 +96,12 @@ def listen_udp(window):
                 window.evaluate_js('window.screenAnalysisComplete();')
             elif cmd == "clear_huds":
                 window.evaluate_js('window.clearSearchHUDs();')
+            elif cmd == "music":
+                window.evaluate_js(f'window.updateMusicHUD("{val}");')
+            elif cmd == "music_meta":
+                import base64
+                encoded_meta = base64.b64encode(val.encode("utf-8")).decode("utf-8")
+                window.evaluate_js(f'window.updateMusicHUD(atob("{encoded_meta}"));')
         except Exception:
             pass
 
@@ -181,6 +187,15 @@ class JSBridge:
             _text_send_sock.sendto(f"text_input:{text}".encode("utf-8"), ("127.0.0.1", 10089))
         except Exception as e:
             print(f"[JSBridge] Error sending text: {e}")
+
+    def control_media(self, action):
+        """Allows direct frontend JavaScript to trigger system-level playerctl commands."""
+        try:
+            from tools.media import control_browser_media
+            return control_browser_media(action)
+        except Exception as e:
+            print(f"[JSBridge] Error controlling media: {e}")
+            return {"error": str(e)}
 
     def get_tuning_config(self):
         """Loads and returns config.toml data for the weapon wheel UI."""
