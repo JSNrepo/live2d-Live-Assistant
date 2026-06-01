@@ -1,5 +1,5 @@
 # LivePythonGemini — Sakura AI Companion
-(demo/thumbnail.png)
+#(demos/thumbnail.png)
 An AI voice companion powered by **Google Gemini Live** with a Live2D animated
 character overlay, real-time audio processing, and an agentic tool layer for
 browser automation, file operations, system control, and web search.
