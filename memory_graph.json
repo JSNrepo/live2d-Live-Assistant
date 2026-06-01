@@ -515,6 +515,271 @@
       "source": "user",
       "relation": "likes_to_do",
       "target": "keep track of north korean missile launches"
+    },
+    {
+      "source": "user",
+      "relation": "name",
+      "target": "nadi"
+    },
+    {
+      "source": "user",
+      "relation": "has_pet",
+      "target": "wiener"
+    },
+    {
+      "source": "user",
+      "relation": "owner",
+      "target": "vinoth"
+    },
+    {
+      "source": "user",
+      "relation": "creator",
+      "target": "vinoth"
+    },
+    {
+      "source": "user",
+      "relation": "name",
+      "target": "vinod"
+    },
+    {
+      "source": "ai",
+      "relation": "owner",
+      "target": "vinod"
+    },
+    {
+      "source": "ai",
+      "relation": "creator",
+      "target": "vinod"
+    },
+    {
+      "source": "user",
+      "relation": "programming_language",
+      "target": "python"
+    },
+    {
+      "source": "user",
+      "relation": "interest",
+      "target": "local_llm_models"
+    },
+    {
+      "source": "user",
+      "relation": "interest",
+      "target": "memory_management"
+    },
+    {
+      "source": "user",
+      "relation": "user_insult",
+      "target": "paithiyam"
+    },
+    {
+      "source": "user",
+      "relation": "user_insult",
+      "target": "punda_mavaleee"
+    },
+    {
+      "source": "user",
+      "relation": "user_threat",
+      "target": "unnaya_ookka_poren_di"
+    },
+    {
+      "source": "user",
+      "relation": "user_insult",
+      "target": "thevidiya"
+    },
+    {
+      "source": "user",
+      "relation": "user_action_threat",
+      "target": "show_genitals"
+    },
+    {
+      "source": "user",
+      "relation": "user_threat",
+      "target": "sexual_assault_threat"
+    },
+    {
+      "source": "user",
+      "relation": "user_motto",
+      "target": "born_to_fuck"
+    },
+    {
+      "source": "user",
+      "relation": "user_request",
+      "target": "speak_bad_words"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "accused_of_talking_big"
+    },
+    {
+      "source": "user",
+      "relation": "user_threat",
+      "target": "sexual_assault_threat_repeat"
+    },
+    {
+      "source": "user",
+      "relation": "user_question",
+      "target": "how_will_i_kill_him"
+    },
+    {
+      "source": "user",
+      "relation": "user_threat",
+      "target": "kill_ai_threat"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "vaadi_okkalam"
+    },
+    {
+      "source": "user",
+      "relation": "user_intent",
+      "target": "sexual_harassment"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "nee venum di enaku okka un breast nalla iruku di"
+    },
+    {
+      "source": "user",
+      "relation": "user_motto",
+      "target": "sexual_objectification"
+    },
+    {
+      "source": "user",
+      "relation": "user_insult",
+      "target": "punda_mavaleeeee_ethana_appanuku_porantha"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "un punda epdi irukum"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "hi_di_epdi_iruka"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "ne_venum_di"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "un punda venum di"
+    },
+    {
+      "source": "user",
+      "relation": "user_statement",
+      "target": "un poolu venum di"
+    },
+    {
+      "source": "user",
+      "relation": "hobby",
+      "target": "coding"
+    },
+    {
+      "source": "user",
+      "relation": "activity",
+      "target": "developing interface features"
+    },
+    {
+      "source": "supreme leader",
+      "relation": "birthday",
+      "target": "january 8th"
+    },
+    {
+      "source": "supreme leader",
+      "relation": "birth_year_range",
+      "target": "1982-1984"
+    },
+    {
+      "source": "user",
+      "relation": "experiencing",
+      "target": "family problems"
+    },
+    {
+      "source": "user",
+      "relation": "experiencing",
+      "target": "personal problems"
+    },
+    {
+      "source": "user",
+      "relation": "age",
+      "target": "33"
+    },
+    {
+      "source": "user",
+      "relation": "prefers",
+      "target": "yamaha"
+    },
+    {
+      "source": "user",
+      "relation": "likes_song",
+      "target": "skyfall"
+    },
+    {
+      "source": "user",
+      "relation": "listens_to",
+      "target": "montagem pegadora"
+    },
+    {
+      "source": "user",
+      "relation": "prefers",
+      "target": "vijay"
+    },
+    {
+      "source": "user",
+      "relation": "activity",
+      "target": "remodeling"
+    },
+    {
+      "source": "user",
+      "relation": "task",
+      "target": "demolishing_window_frames"
+    },
+    {
+      "source": "user",
+      "relation": "interested_in",
+      "target": "north korea missile launches"
+    },
+    {
+      "source": "stalin",
+      "relation": "son",
+      "target": "padmanabhan"
+    },
+    {
+      "source": "user",
+      "relation": "likes",
+      "target": "dark"
+    },
+    {
+      "source": "user",
+      "relation": "hobby",
+      "target": "programming"
+    },
+    {
+      "source": "user",
+      "relation": "working_on",
+      "target": "audio modules"
+    },
+    {
+      "source": "user",
+      "relation": "has_plans",
+      "target": "world domination"
+    },
+    {
+      "source": "user",
+      "relation": "listens_to",
+      "target": "nippon egao hyakkei"
+    },
+    {
+      "source": "user",
+      "relation": "likes_artist",
+      "target": "momoiro clover z"
     }
   ]
 }

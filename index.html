@@ -28,7 +28,27 @@
     @keyframes scan-anim { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
     @keyframes pulse-anim { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
 
-    canvas { width: 100vw; height: 100vh; display: block; filter: sepia(1) hue-rotate(185deg) saturate(5) brightness(0.95) contrast(1.1) drop-shadow(0 0 10px rgba(0, 240, 255, 0.6)); opacity: 0.82; -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%); }
+    #canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      filter: sepia(1) hue-rotate(185deg) saturate(5) brightness(0.95) contrast(1.1) drop-shadow(0 0 10px rgba(0, 240, 255, 0.6));
+      opacity: 0.82;
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%);
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 75%, rgba(0,0,0,0) 100%);
+      transition: opacity 0.3s ease;
+    }
+    #visualizer-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: none;
+      z-index: 5;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
 
     #speech-container { position: relative; width: 100%; max-height: 220px; display: flex; flex-direction: column; z-index: 1000; opacity: 0; pointer-events: none; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: visible; background: transparent; box-shadow: none; border: none; clip-path: none; filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.4)); animation: border-glow-breathe 4s ease-in-out infinite; }
     #speech-card { width: 100%; height: 100%; box-sizing: border-box; background: linear-gradient(135deg, var(--vibe-color, rgba(0, 240, 255, 0.85)), rgba(0, 120, 255, 0.35)); padding: 1.5px; clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px)); transition: background 0.6s ease; }
@@ -247,6 +267,490 @@
       height: 100%;
       object-fit: cover;
     }
+
+    /* Sci-Fi Weapon Control Wheel Styles */
+    #wheel-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9000;
+      background: transparent;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+    #wheel-overlay.visible {
+      display: flex;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #wheel-vignette {
+      display: none;
+    }
+    
+    #weapon-wheel {
+      position: relative;
+      width: 360px;
+      height: 360px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: scale(0.7) rotate(-45deg);
+      transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(4, 10, 18, 0.94) 55%, rgba(4, 10, 18, 0.6) 80%, transparent 100%);
+      box-shadow: 0 0 75px 25px rgba(4, 10, 18, 0.9), 0 0 35px 5px rgba(0, 240, 255, 0.15);
+    }
+    #wheel-overlay.visible #weapon-wheel {
+      transform: scale(1) rotate(0deg);
+    }
+    
+    #wheel-close-btn {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 0, 80, 0.08);
+      border: 1px solid rgba(255, 0, 80, 0.4);
+      border-radius: 4px;
+      color: #ff0050;
+      font-family: 'Outfit', 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      padding: 8px 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 0 10px rgba(255, 0, 80, 0.15);
+      z-index: 9100;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+    }
+    #wheel-close-btn:hover {
+      background: rgba(255, 0, 80, 0.22);
+      border-color: #ff0050;
+      box-shadow: 0 0 15px rgba(255, 0, 80, 0.4);
+      transform: translateX(-50%) scale(1.05);
+    }
+    #wheel-close-btn svg {
+      width: 12px;
+      height: 12px;
+      stroke: currentColor;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    
+    #wheel-svg {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: auto;
+      filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.3));
+    }
+    
+    .wheel-sector-wedge {
+      fill: rgba(0, 15, 25, 0.85);
+      stroke: rgba(0, 240, 255, 0.35);
+      stroke-width: 1.5px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+    .wheel-sector-wedge:hover, .wheel-sector-wedge.active {
+      fill: rgba(0, 240, 255, 0.25);
+      stroke: #00f0ff;
+      filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.6));
+    }
+    #wedge-gate:hover, #wedge-gate.active { fill: rgba(0, 240, 255, 0.22); stroke: #00f0ff; }
+    #wedge-barge:hover, #wedge-barge.active { fill: rgba(255, 0, 128, 0.18); stroke: #ff0080; }
+    #wedge-voice:hover, #wedge-voice.active { fill: rgba(0, 255, 128, 0.18); stroke: #00ff80; }
+    #wedge-emotion:hover, #wedge-emotion.active { fill: rgba(255, 200, 0, 0.18); stroke: #ffc800; }
+    #wedge-volume:hover, #wedge-volume.active { fill: rgba(0, 128, 255, 0.18); stroke: #0080ff; }
+    #wedge-system:hover, #wedge-system.active { fill: rgba(200, 0, 255, 0.18); stroke: #c800ff; }
+    
+    .rotating-grid {
+      transform-origin: center;
+      animation: spin-clockwise 24s linear infinite;
+    }
+    @keyframes spin-clockwise {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    #wheel-central-core {
+      position: absolute;
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: rgba(2, 6, 12, 0.95);
+      border: 1.5px solid rgba(0, 240, 255, 0.6);
+      box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.4), 0 0 15px rgba(0, 240, 255, 0.3);
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      pointer-events: none;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    
+    #wheel-core-title {
+      font-size: 7.5px;
+      font-weight: 800;
+      color: #00f0ff;
+      letter-spacing: 0.8px;
+      margin-bottom: 1px;
+      text-shadow: 0 0 4px rgba(0, 240, 255, 0.5);
+    }
+    #wheel-core-subtitle {
+      font-size: 5px;
+      color: rgba(224, 247, 252, 0.6);
+      font-family: monospace;
+      margin-bottom: 3px;
+    }
+    #wheel-core-status {
+      font-size: 6px;
+      font-weight: 700;
+      color: #ff0080;
+      background: rgba(255, 0, 128, 0.1);
+      border: 0.5px solid rgba(255, 0, 128, 0.3);
+      padding: 1px 3px;
+      border-radius: 2px;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+    #wheel-core-subtext {
+      font-size: 5px;
+      color: rgba(0, 240, 255, 0.5);
+      font-family: monospace;
+      text-transform: uppercase;
+    }
+    
+    .wheel-btn {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 78px;
+      height: 54px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      color: rgba(0, 240, 255, 0.65);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: auto;
+    }
+    .wheel-btn:hover {
+      color: #00f0ff;
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+    .wheel-icon {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      margin-bottom: 4px;
+      filter: drop-shadow(0 0 3px rgba(0, 240, 255, 0.2));
+      transition: all 0.2s ease;
+    }
+    .wheel-btn:hover .wheel-icon {
+      filter: drop-shadow(0 0 6px currentColor);
+    }
+    .wheel-label {
+      font-size: 6.8px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      font-family: monospace;
+    }
+    
+    /* Surrounding Sector offsets */
+    .wheel-btn-1 { transform: translate(-50%, calc(-50% - 105px)); }
+    .wheel-btn-1:hover { transform: translate(-50%, calc(-50% - 108px)) scale(1.1); color: #00f0ff; }
+    
+    .wheel-btn-2 { transform: translate(calc(-50% + 91px), calc(-50% - 53px)); }
+    .wheel-btn-2:hover { transform: translate(calc(-50% + 94px), calc(-50% - 55px)) scale(1.1); color: #ff0080; }
+    
+    .wheel-btn-3 { transform: translate(calc(-50% + 91px), calc(-50% + 53px)); }
+    .wheel-btn-3:hover { transform: translate(calc(-50% + 94px), calc(-50% + 55px)) scale(1.1); color: #00ff80; }
+    
+    .wheel-btn-4 { transform: translate(-50%, calc(-50% + 105px)); }
+    .wheel-btn-4:hover { transform: translate(-50%, calc(-50% + 108px)) scale(1.1); color: #ffc800; }
+    
+    .wheel-btn-5 { transform: translate(calc(-50% - 91px), calc(-50% + 53px)); }
+    .wheel-btn-5:hover { transform: translate(calc(-50% - 94px), calc(-50% + 55px)) scale(1.1); color: #0080ff; }
+    
+    .wheel-btn-6 { transform: translate(calc(-50% - 91px), calc(-50% - 53px)); }
+    .wheel-btn-6:hover { transform: translate(calc(-50% - 94px), calc(-50% - 55px)) scale(1.1); color: #c800ff; }
+    
+    /* Dynamic slide-out config panel */
+    #tuning-panel-card {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.85);
+      width: 320px;
+      max-width: 90vw;
+      box-sizing: border-box;
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.4), rgba(0, 120, 255, 0.1));
+      padding: 1.5px;
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+      z-index: 120;
+      display: none;
+      opacity: 0;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #tuning-panel-card.visible {
+      display: block;
+      opacity: 1;
+      transform: translate(calc(-50% + 195px), -50%) scale(1);
+    }
+    
+    /* Mobile/Responsive offset positioning for smaller screen viewports */
+    @media (max-width: 768px) {
+      #tuning-panel-card.visible {
+        transform: translate(-50%, calc(-50% + 195px)) scale(1);
+      }
+    }
+    
+    #tuning-panel-inner {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(4, 10, 18, 0.98);
+      padding: 12px 16px;
+      clip-path: polygon(0 0, calc(100% - 12.5px) 0, 100% 12.5px, 100% 100%, 12.5px 100%, 0 calc(100% - 12.5px));
+      box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.08);
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    
+    #tuning-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+    }
+    #tuning-panel-title {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: #00f0ff;
+      text-shadow: 0 0 4px rgba(0, 240, 255, 0.4);
+      font-family: monospace;
+    }
+    #tuning-panel-close {
+      background: none;
+      border: none;
+      color: rgba(0, 240, 255, 0.5);
+      font-size: 16px;
+      cursor: pointer;
+      transition: color 0.2s ease;
+      line-height: 1;
+    }
+    #tuning-panel-close:hover {
+      color: #ff0080;
+    }
+    
+    .tuning-section {
+      display: none;
+      animation: fade-in 0.25s ease both;
+    }
+    .tuning-section.active {
+      display: block;
+    }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .tuning-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .tuning-label-text {
+      font-size: 9px;
+      font-weight: 700;
+      color: rgba(224, 247, 252, 0.85);
+      letter-spacing: 0.5px;
+    }
+    
+    /* High-tech Sci-Fi toggles */
+    .tech-toggle {
+      width: 46px;
+      height: 18px;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      border-radius: 9px;
+      background: rgba(0, 15, 25, 0.8);
+      position: relative;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 6px;
+      box-sizing: border-box;
+    }
+    .tech-toggle.active {
+      border-color: #00ff80;
+      background: rgba(0, 255, 128, 0.1);
+      justify-content: flex-start;
+      padding-left: 6px;
+      padding-right: 0;
+    }
+    .toggle-indicator {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: rgba(0, 240, 255, 0.7);
+      box-shadow: 0 0 6px rgba(0, 240, 255, 0.6);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tech-toggle.active .toggle-indicator {
+      left: 30px;
+      background: #00ff80;
+      box-shadow: 0 0 6px #00ff80;
+    }
+    .toggle-text {
+      font-size: 7px;
+      font-weight: 800;
+      color: rgba(0, 240, 255, 0.6);
+      font-family: monospace;
+      pointer-events: none;
+    }
+    .tech-toggle.active .toggle-text {
+      color: #00ff80;
+    }
+    
+    /* Neon dynamic sliders */
+    .tuning-slider-container {
+      margin-top: 8px;
+    }
+    .tuning-slider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 8px;
+      font-weight: 700;
+      color: rgba(224, 247, 252, 0.75);
+    }
+    .slider-val {
+      font-family: monospace;
+      color: #00f0ff;
+      font-weight: 800;
+    }
+    .tech-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: rgba(0, 240, 255, 0.15);
+      border: 0.5px solid rgba(0, 240, 255, 0.3);
+      border-radius: 2px;
+      outline: none;
+      margin-bottom: 4px;
+    }
+    .tech-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #00f0ff;
+      border: 1px solid rgba(4, 10, 18, 1);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+      transition: transform 0.15s ease;
+    }
+    .tech-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+    }
+    .slider-tech-axis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 6px;
+      color: rgba(0, 240, 255, 0.4);
+      font-family: monospace;
+    }
+    
+    /* Emotion Override Grid */
+    .emotion-tech-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .emo-btn {
+      background: rgba(0, 15, 25, 0.6);
+      border: 1px solid rgba(0, 240, 255, 0.35);
+      border-radius: 3px;
+      color: rgba(0, 240, 255, 0.75);
+      font-size: 7.5px;
+      font-family: monospace;
+      font-weight: 700;
+      padding: 6px 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .emo-btn:hover {
+      background: rgba(0, 240, 255, 0.15);
+      border-color: #00f0ff;
+      color: #00f0ff;
+      box-shadow: 0 0 6px rgba(0, 240, 255, 0.3);
+    }
+    .emo-btn.active {
+      background: rgba(0, 255, 128, 0.12);
+      border-color: #00ff80;
+      color: #00ff80;
+      box-shadow: 0 0 6px rgba(0, 255, 128, 0.3);
+    }
+    
+    /* System actions grid */
+    .sys-actions-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .sys-action-btn {
+      background: rgba(15, 5, 25, 0.6);
+      border: 1px solid rgba(200, 0, 255, 0.4);
+      border-radius: 3px;
+      color: rgba(200, 0, 255, 0.8);
+      font-size: 8px;
+      font-family: monospace;
+      font-weight: 700;
+      padding: 8px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      letter-spacing: 0.5px;
+    }
+    .sys-action-btn:hover {
+      background: rgba(200, 0, 255, 0.18);
+      border-color: #c800ff;
+      color: #ffffff;
+      box-shadow: 0 0 8px rgba(200, 0, 255, 0.4);
+    }
   </style>
 
 </head>
@@ -370,6 +874,7 @@
   </div>
 
   <canvas id="canvas"></canvas>
+  <canvas id="visualizer-canvas"></canvas>
 
   <!-- Prompt input container (Quiet Mode) -->
   <div id="prompt-container">
@@ -406,6 +911,217 @@
   <!-- Floating Hover Preview (completely outside the HUD boxes) -->
   <div id="hover-image-preview">
     <img id="hover-preview-img" src="" alt="Preview">
+  </div>
+
+  <!-- Sci-Fi Weapon-Style Configuration/Tuning Wheel -->
+  <div id="wheel-overlay" onclick="closeWeaponWheel()">
+    <!-- Glowing background vignette -->
+    <div id="wheel-vignette"></div>
+    
+    <!-- Central Weapon Wheel container -->
+    <div id="weapon-wheel" onclick="event.stopPropagation()">
+      <!-- Central core circular info displays -->
+      <div id="wheel-central-core">
+        <div id="wheel-core-title">HIYORI_CORE</div>
+        <div id="wheel-core-subtitle">SYS_TUNING_v1.2</div>
+        <div id="wheel-core-status">STANDBY</div>
+        <div id="wheel-core-subtext">SELECT SECTOR</div>
+      </div>
+      
+      <!-- SVG Sector Wedges -->
+      <svg id="wheel-svg" viewBox="-100 -100 200 200">
+        <defs>
+          <radialGradient id="radial-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="rgba(0, 240, 255, 0.15)" />
+            <stop offset="100%" stop-color="rgba(0, 0, 0, 0.4)" />
+          </radialGradient>
+        </defs>
+        
+        <!-- Background circular grids -->
+        <circle cx="0" cy="0" r="42" fill="none" stroke="rgba(0, 240, 255, 0.25)" stroke-width="0.5" />
+        <circle cx="0" cy="0" r="50" fill="none" stroke="rgba(0, 240, 255, 0.1)" stroke-width="1" />
+        <circle cx="0" cy="0" r="85" fill="none" stroke="rgba(0, 240, 255, 0.15)" stroke-width="0.5" stroke-dasharray="1,3" />
+        <circle cx="0" cy="0" r="90" fill="none" stroke="rgba(0, 240, 255, 0.3)" stroke-width="0.8" stroke-dasharray="8,8" />
+        <circle cx="0" cy="0" r="93" fill="none" stroke="rgba(0, 240, 255, 0.5)" stroke-width="1.2" stroke-dasharray="140, 48">
+          <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="24s" repeatCount="indefinite" />
+        </circle>
+        
+        <!-- 6 Hollow Wedge Sectors (HInner: 42, Outer: 90) -->
+        <!-- Sector 1: Gate (Top, -30 to 30 deg) -->
+        <path class="wheel-sector-wedge" id="wedge-gate" d="M -21 -36.37 L -45 -77.94 A 90 90 0 0 1 45 -77.94 L 21 -36.37 A 42 42 0 0 0 -21 -36.37 Z" onclick="selectSector('gate')" />
+        <!-- Sector 2: Barge (Right Top, 30 to 90 deg) -->
+        <path class="wheel-sector-wedge" id="wedge-barge" d="M 21 -36.37 L 45 -77.94 A 90 90 0 0 1 90 0 L 42 0 A 42 42 0 0 0 21 -36.37 Z" onclick="selectSector('barge')" />
+        <!-- Sector 3: Voice (Right Bottom, 90 to 150 deg) -->
+        <path class="wheel-sector-wedge" id="wedge-voice" d="M 42 0 L 90 0 A 90 90 0 0 1 45 77.94 L 21 36.37 A 42 42 0 0 0 42 0 Z" onclick="selectSector('voice')" />
+        <!-- Sector 4: Emotion (Bottom, 150 to 210 deg) -->
+        <path class="wheel-sector-wedge" id="wedge-emotion" d="M 21 36.37 L 45 77.94 A 90 90 0 0 1 -45 77.94 L -21 36.37 A 42 42 0 0 0 21 36.37 Z" onclick="selectSector('emotion')" />
+        <!-- Sector 5: Volume (Left Bottom, 210 to 270 deg) -->
+        <path class="wheel-sector-wedge" id="wedge-volume" d="M -21 36.37 L -45 77.94 A 90 90 0 0 1 -90 0 L -42 0 A 42 42 0 0 0 -21 36.37 Z" onclick="selectSector('volume')" />
+        <!-- Sector 6: System (Left Top, 270 to 330 deg) -->
+        <path class="wheel-sector-wedge" id="wedge-system" d="M -42 0 L -90 0 A 90 90 0 0 1 -45 -77.94 L -21 -36.37 A 42 42 0 0 0 -42 0 Z" onclick="selectSector('system')" />
+      </svg>
+      
+      <!-- SURROUNDING INTERACTIVE BTNS (Overlayed on top of SVGs) -->
+      <!-- Sector 1: Gate -->
+      <div class="wheel-btn wheel-btn-1" id="btn-gate" onmouseenter="hoverSector('gate')" onmouseleave="unhoverSector('gate')" onclick="selectSector('gate')">
+        <svg class="wheel-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="2" rx="1"></rect><rect x="3" y="5" width="18" height="2" rx="1"></rect><rect x="3" y="17" width="18" height="2" rx="1"></rect></svg>
+        <span class="wheel-label">NOISE_GATE</span>
+      </div>
+      <!-- Sector 2: Barge-in -->
+      <div class="wheel-btn wheel-btn-2" id="btn-barge" onmouseenter="hoverSector('barge')" onmouseleave="unhoverSector('barge')" onclick="selectSector('barge')">
+        <svg class="wheel-icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+        <span class="wheel-label">BARGE_IN</span>
+      </div>
+      <!-- Sector 3: Voice Synth -->
+      <div class="wheel-btn wheel-btn-3" id="btn-voice" onmouseenter="hoverSector('voice')" onmouseleave="unhoverSector('voice')" onclick="selectSector('voice')">
+        <svg class="wheel-icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"></path></svg>
+        <span class="wheel-label">VOICE_PITCH</span>
+      </div>
+      <!-- Sector 4: Emotion -->
+      <div class="wheel-btn wheel-btn-4" id="btn-emotion" onmouseenter="hoverSector('emotion')" onmouseleave="unhoverSector('emotion')" onclick="selectSector('emotion')">
+        <svg class="wheel-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"></path></svg>
+        <span class="wheel-label">EMO_STATE</span>
+      </div>
+      <!-- Sector 5: Volume -->
+      <div class="wheel-btn wheel-btn-5" id="btn-volume" onmouseenter="hoverSector('volume')" onmouseleave="unhoverSector('volume')" onclick="selectSector('volume')">
+        <svg class="wheel-icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+        <span class="wheel-label">VOLUME</span>
+      </div>
+      <!-- Sector 6: System Operations -->
+      <div class="wheel-btn wheel-btn-6" id="btn-system" onmouseenter="hoverSector('system')" onmouseleave="unhoverSector('system')" onclick="selectSector('system')">
+        <svg class="wheel-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span class="wheel-label">SYS_OPER</span>
+      </div>
+    </div>
+    
+    <!-- Sci-Fi red close button at the bottom center -->
+    <button id="wheel-close-btn" onclick="closeWeaponWheel(); event.stopPropagation();">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      <span>CLOSE_TUNING_MODULE</span>
+    </button>
+    
+    <!-- SUB-PANEL CARDS (Slide out from side when wedge is clicked) -->
+    <div id="tuning-panel-card" onclick="event.stopPropagation()">
+      <div id="tuning-panel-inner">
+        <div id="tuning-panel-header">
+          <span id="tuning-panel-title">SECTOR_CONFIG</span>
+          <button id="tuning-panel-close" onclick="closeTuningPanel()">&times;</button>
+        </div>
+        
+        <div id="tuning-panel-body">
+          <!-- Dynamic control nodes will be toggled here based on selected wedge -->
+          <div class="tuning-section" id="section-gate">
+            <div class="tuning-row">
+              <label class="tuning-label-text">GATE ENABLED</label>
+              <div class="tech-toggle" id="toggle-gate" onclick="toggleSetting('noise_gate', 'enabled')">
+                <div class="toggle-indicator"></div>
+                <span class="toggle-text">OFF</span>
+              </div>
+            </div>
+            <div class="tuning-slider-container">
+              <div class="tuning-slider-header">
+                <span>GATE MIN THRESHOLD</span>
+                <span class="slider-val" id="val-gate-rms">20.0 RMS</span>
+              </div>
+              <input type="range" class="tech-slider" id="slider-gate-rms" min="5" max="300" step="5" oninput="updateSliderVal('gate-rms', this.value, ' RMS')" onchange="commitConfig('noise_gate', 'min_rms', this.value)">
+              <div class="slider-tech-axis">
+                <span>5.0</span>
+                <span>150.0</span>
+                <span>300.0</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="tuning-section" id="section-barge">
+            <div class="tuning-row">
+              <label class="tuning-label-text">BARGE-IN ACTIVATE</label>
+              <div class="tech-toggle" id="toggle-barge" onclick="toggleSetting('barge_in', 'enabled')">
+                <div class="toggle-indicator"></div>
+                <span class="toggle-text">OFF</span>
+              </div>
+            </div>
+            <div class="tuning-slider-container">
+              <div class="tuning-slider-header">
+                <span>INTERRUPTION SENSITIVITY</span>
+                <span class="slider-val" id="val-barge-thresh">80.0 RMS</span>
+              </div>
+              <input type="range" class="tech-slider" id="slider-barge-thresh" min="20" max="800" step="10" oninput="updateSliderVal('barge-thresh', this.value, ' RMS')" onchange="commitConfig('barge_in', 'threshold', this.value)">
+              <div class="slider-tech-axis">
+                <span>20.0</span>
+                <span>400.0</span>
+                <span>800.0</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="tuning-section" id="section-voice">
+            <div class="tuning-slider-container">
+              <div class="tuning-slider-header">
+                <span>SYNTH PITCH FACTOR</span>
+                <span class="slider-val" id="val-voice-pitch">1.60x</span>
+              </div>
+              <input type="range" class="tech-slider" id="slider-voice-pitch" min="0.8" max="2.2" step="0.05" oninput="updateSliderVal('voice-pitch', this.value, 'x')" onchange="commitConfig('voice', 'pitch_factor', this.value)">
+              <div class="slider-tech-axis">
+                <span>0.8x (LOW)</span>
+                <span>1.5x</span>
+                <span>2.2x (HIGH)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="tuning-section" id="section-emotion">
+            <label class="tuning-label-text">FORCE EMOTION OVERRIDE</label>
+            <div class="emotion-tech-grid">
+              <button class="emo-btn" onclick="forceEmotion('idle')">WAKE/IDLE</button>
+              <button class="emo-btn" onclick="forceEmotion('sleeping')">DEEP_SLEEP</button>
+              <button class="emo-btn" onclick="forceEmotion('process')">PROCESS</button>
+              <button class="emo-btn" onclick="forceEmotion('scan')">CORE_SCAN</button>
+              <button class="emo-btn" onclick="forceEmotion('suspicious')">SUSPICIOUS</button>
+              <button class="emo-btn" onclick="forceEmotion('smug')">SMUG</button>
+              <button class="emo-btn" onclick="forceEmotion('angry')">MAD_ROAST</button>
+              <button class="emo-btn" onclick="forceEmotion('vibing')">VIBE_DANCE</button>
+            </div>
+          </div>
+          
+          <div class="tuning-section" id="section-volume">
+            <div class="tuning-slider-container">
+              <div class="tuning-slider-header">
+                <span>MASTER FEEDBACK RATIO</span>
+                <span class="slider-val" id="val-audio-fb">0.00</span>
+              </div>
+              <input type="range" class="tech-slider" id="slider-audio-fb" min="0.0" max="0.5" step="0.05" oninput="updateSliderVal('audio-fb', this.value, '')" onchange="commitConfig('barge_in', 'feedback_ratio', this.value)">
+              <div class="slider-tech-axis">
+                <span>0.0 (HEADPHONES)</span>
+                <span>0.5 (SPEAKERS)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="tuning-section" id="section-system">
+            <label class="tuning-label-text">QUICK TERMINAL SYSTEM ACTIONS</label>
+            <div class="sys-actions-grid">
+              <button class="sys-action-btn" onclick="triggerSysAction('clear_huds')">CLEAR HUDS</button>
+              <button class="sys-action-btn" onclick="triggerSysAction('screen_capture')">SCREEN CAPTURE</button>
+              <button class="sys-action-btn" onclick="triggerSysAction('restart_session')">RELOAD CORE</button>
+            </div>
+            <div class="tuning-row" style="margin-top: 15px; border-top: 1px solid rgba(0, 240, 255, 0.15); padding-top: 12px;">
+              <label class="tuning-label-text">VISUALIZER MODE</label>
+              <div class="tech-toggle" id="toggle-visualizer" onclick="toggleVisualizerMode()">
+                <div class="toggle-indicator"></div>
+                <span class="toggle-text">OFF</span>
+              </div>
+            </div>
+            <div class="tuning-row" id="row-visualizer-style" style="margin-top: 8px; border-top: 1px solid rgba(0, 240, 255, 0.08); padding-top: 8px; display: none;">
+              <label class="tuning-label-text">VISUALIZER SHAPE</label>
+              <div class="tech-toggle" id="toggle-visualizer-style" onclick="toggleVisualizerStyle()">
+                <div class="toggle-indicator"></div>
+                <span class="toggle-text">LINE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -528,11 +1244,11 @@
         const browRYIdx = core.getParameterIndex('ParamBrowRY');
         const browLXIdx = core.getParameterIndex('ParamBrowLX');
         const browRXIdx = core.getParameterIndex('ParamBrowRX');
+        const angleXIdx = core.getParameterIndex('ParamAngleX');
+        const angleYIdx = core.getParameterIndex('ParamAngleY');
         const angleZIdx = core.getParameterIndex('ParamAngleZ');
         const mouthFormIdx = core.getParameterIndex('ParamMouthForm');
         const mouthOpenIdx = core.getParameterIndex('ParamMouthOpenY');
-        
-        const angleYIdx = core.getParameterIndex('ParamAngleY');
         const eyeballXIdx = core.getParameterIndex('ParamEyeBallX');
         const eyeballYIdx = core.getParameterIndex('ParamEyeBallY');
 
@@ -732,11 +1448,37 @@
             browStress = (currentMouth - 0.65) * 0.6;
           }
 
+          // ==========================================
+          // DYNAMIC HEAD BOBBING & DANCING BEAT ENGINE
+          // ==========================================
+          let danceX = 0;
+          let danceY = 0;
+          let danceZ = 0;
+
+          // React to microphone input, system audio monitor, or speaker voice output
+          const activeAudioLevel = Math.max(currentMicRMS, currentMouth * 8000.0);
+          if (activeAudioLevel > 180.0) {
+            const danceTime = Date.now() / 150; // Dynamic tempo speed
+            const intensity = Math.min(1.0, activeAudioLevel / 6500.0); // Damping intensity
+
+            // Fluid figure-8 head bobbing and roll swaying sways Hiyori beautifully!
+            danceX = Math.sin(danceTime) * 16.0 * intensity;
+            danceY = Math.cos(danceTime * 2.0) * 8.0 * intensity;
+            danceZ = Math.sin(danceTime * 1.5) * 10.0 * intensity;
+          }
+
           // 7. Buttery Smooth Sentiment/Parameter Blending (Linear Interpolation - Motion-Immune)
           let blendFactor = 0.15; 
           
+          let curX = core.getParameterValueByIndex(angleXIdx);
+          let blendX = curX + (danceX - curX) * 0.12;
+
+          let curY = core.getParameterValueByIndex(angleYIdx);
+          let baseTargetY = (angleYOverride !== null) ? angleYOverride : 0.0;
+          let blendY = curY + (baseTargetY + danceY - curY) * 0.12;
+
           let curZ = core.getParameterValueByIndex(angleZIdx);
-          let blendZ = curZ + (targetAngleZ - curZ) * 0.08;
+          let blendZ = curZ + (targetAngleZ + danceZ - curZ) * 0.08;
 
           // Perform smooth mathematical transitions completely independent of active motion files
           currentRenderedBrowLY += ((targetBrowLY + browStress) - currentRenderedBrowLY) * blendFactor;
@@ -759,6 +1501,8 @@
           core.setParameterValueByIndex(browRYIdx, currentRenderedBrowRY);
           core.setParameterValueByIndex(browLXIdx, currentRenderedBrowLX);
           core.setParameterValueByIndex(browRXIdx, currentRenderedBrowRX);
+          core.setParameterValueByIndex(angleXIdx, blendX);
+          core.setParameterValueByIndex(angleYIdx, blendY);
           core.setParameterValueByIndex(angleZIdx, blendZ);
           core.setParameterValueByIndex(mouthFormIdx, currentRenderedMouthForm);
 
@@ -796,9 +1540,6 @@
           }
 
           // 8. Apply state-based parameter overrides
-          if (angleYOverride !== null) {
-            core.setParameterValueByIndex(angleYIdx, angleYOverride);
-          }
           if (eyeballXOverride !== null) {
             core.setParameterValueByIndex(eyeballXIdx, eyeballXOverride);
           }
@@ -842,6 +1583,26 @@
 
         // Trigger loading confirmation
         console.log("Live2D companion loaded and ready.");
+
+        // Fetch configurations on startup
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.get_tuning_config) {
+          window.pywebview.api.get_tuning_config().then((config) => {
+            activeConfig = config || {};
+            populateTuningPanel();
+          }).catch((err) => {
+            console.error("Failed to load startup config:", err);
+          });
+        } else {
+          // Retry slightly later if pywebview is still initializing
+          setTimeout(() => {
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.get_tuning_config) {
+              window.pywebview.api.get_tuning_config().then((config) => {
+                activeConfig = config || {};
+                populateTuningPanel();
+              });
+            }
+          }, 500);
+        }
       } catch (err) {
         console.error("Failed to load Live2D model:", err);
       }
@@ -1505,6 +2266,746 @@
         }
       }, 300);
     };
+
+    // ==========================================
+    // SCI-FI WEAPON CONTROL WHEEL LOGIC
+    // ==========================================
+    let activeConfig = {};
+    let selectedSector = null;
+
+    // Listen for right-click on the document to open the weapons tuning wheel
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openWeaponWheel();
+    });
+
+    window.openWeaponWheel = function() {
+      const overlay = document.getElementById('wheel-overlay');
+      if (!overlay) return;
+
+      // Close other overlays first
+      closeLargeImagePreview();
+      closeTuningPanel();
+
+      // Fetch latest active configurations from Python JSBridge
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.get_tuning_config) {
+        window.pywebview.api.get_tuning_config().then((config) => {
+          activeConfig = config || {};
+          populateTuningPanel();
+        }).catch((err) => {
+          console.error("Failed to load tuning config:", err);
+        });
+      }
+
+      overlay.style.display = 'flex';
+      overlay.offsetHeight; // Reflow
+      overlay.classList.add('visible');
+      
+      const coreSubtext = document.getElementById('wheel-core-subtext');
+      if (coreSubtext) coreSubtext.textContent = "SELECT SECTOR";
+      const coreStatus = document.getElementById('wheel-core-status');
+      if (coreStatus) coreStatus.textContent = currentState;
+    };
+
+    window.closeWeaponWheel = function() {
+      const overlay = document.getElementById('wheel-overlay');
+      if (!overlay) return;
+      overlay.classList.remove('visible');
+      closeTuningPanel();
+      setTimeout(() => {
+        if (!overlay.classList.contains('visible')) {
+          overlay.style.display = 'none';
+        }
+      }, 300);
+    };
+
+    // Close on Escape key press
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeWeaponWheel();
+      }
+    });
+
+    window.hoverSector = function(sector) {
+      const wedge = document.getElementById(`wedge-${sector}`);
+      if (wedge) wedge.classList.add('active');
+
+      const coreTitle = document.getElementById('wheel-core-title');
+      const coreSubtext = document.getElementById('wheel-core-subtext');
+      if (coreTitle) {
+        if (sector === 'gate') coreTitle.textContent = "NOISE_GATE";
+        else if (sector === 'barge') coreTitle.textContent = "BARGE_IN";
+        else if (sector === 'voice') coreTitle.textContent = "VOICE_PITCH";
+        else if (sector === 'emotion') coreTitle.textContent = "CORE_STATE";
+        else if (sector === 'volume') coreTitle.textContent = "VOLUME";
+        else if (sector === 'system') coreTitle.textContent = "SYS_OPER";
+      }
+      if (coreSubtext) coreSubtext.textContent = "CLICK TO TUNE";
+    };
+
+    window.unhoverSector = function(sector) {
+      const wedge = document.getElementById(`wedge-${sector}`);
+      if (wedge && selectedSector !== sector) wedge.classList.remove('active');
+
+      const coreTitle = document.getElementById('wheel-core-title');
+      const coreSubtext = document.getElementById('wheel-core-subtext');
+      if (coreTitle) coreTitle.textContent = "HIYORI_CORE";
+      if (coreSubtext) coreSubtext.textContent = selectedSector ? `TUNING: ${selectedSector.toUpperCase()}` : "SELECT SECTOR";
+    };
+
+    window.selectSector = function(sector) {
+      // Clear active sectors
+      document.querySelectorAll('.wheel-sector-wedge').forEach(w => w.classList.remove('active'));
+      selectedSector = sector;
+
+      const wedge = document.getElementById(`wedge-${sector}`);
+      if (wedge) wedge.classList.add('active');
+
+      const coreSubtext = document.getElementById('wheel-core-subtext');
+      if (coreSubtext) coreSubtext.textContent = `TUNING: ${sector.toUpperCase()}`;
+
+      // Toggle active panel sections
+      document.querySelectorAll('.tuning-section').forEach(s => s.classList.remove('active'));
+      const activeSec = document.getElementById(`section-${sector}`);
+      if (activeSec) activeSec.classList.add('active');
+
+      // Slide out the settings sub-panel
+      const card = document.getElementById('tuning-panel-card');
+      if (card) {
+        card.style.display = 'block';
+        card.offsetHeight; // Reflow
+        card.classList.add('visible');
+      }
+    };
+
+    window.closeTuningPanel = function() {
+      const card = document.getElementById('tuning-panel-card');
+      if (card) {
+        card.classList.remove('visible');
+        setTimeout(() => {
+          if (!card.classList.contains('visible')) {
+            card.style.display = 'none';
+          }
+        }, 300);
+      }
+      document.querySelectorAll('.wheel-sector-wedge').forEach(w => w.classList.remove('active'));
+      selectedSector = null;
+      const coreSubtext = document.getElementById('wheel-core-subtext');
+      if (coreSubtext) coreSubtext.textContent = "SELECT SECTOR";
+    };
+
+    // Populate active controls with loaded config values
+    function populateTuningPanel() {
+      // Noise gate
+      const gate = activeConfig.noise_gate || {};
+      const gateEnabled = gate.enabled !== false;
+      const gateRMS = gate.min_rms !== undefined ? gate.min_rms : 20.0;
+      setToggleState('toggle-gate', gateEnabled);
+      setSliderValue('slider-gate-rms', 'val-gate-rms', gateRMS, ' RMS');
+
+      // Barge in
+      const barge = activeConfig.barge_in || {};
+      const bargeEnabled = barge.enabled !== false;
+      const bargeThresh = barge.threshold !== undefined ? barge.threshold : 80.0;
+      const bargeFB = barge.feedback_ratio !== undefined ? barge.feedback_ratio : 0.0;
+      setToggleState('toggle-barge', bargeEnabled);
+      setSliderValue('slider-barge-thresh', 'val-barge-thresh', bargeThresh, ' RMS');
+      setSliderValue('slider-audio-fb', 'val-audio-fb', bargeFB, '');
+
+      // Voice pitch
+      const voice = activeConfig.voice || {};
+      const voicePitch = voice.pitch_factor !== undefined ? voice.pitch_factor : 1.6;
+      setSliderValue('slider-voice-pitch', 'val-voice-pitch', voicePitch, 'x');
+
+      // Sync active override emotion
+      document.querySelectorAll('.emo-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.textContent.toLowerCase() === currentEmotion) {
+          btn.classList.add('active');
+        }
+      });
+
+      // Visualizer Mode
+      const live2d = activeConfig.live2d || {};
+      const visualizerEnabled = live2d.visualizer_enabled === true;
+      setToggleState('toggle-visualizer', visualizerEnabled);
+      setVisualizerMode(visualizerEnabled);
+
+      // Visualizer Style
+      const visualizerStyle = live2d.visualizer_style || 'linear';
+      setToggleState('toggle-visualizer-style', visualizerStyle === 'circle');
+    }
+
+    function setToggleState(id, isActive) {
+      const toggle = document.getElementById(id);
+      if (!toggle) return;
+      if (isActive) {
+        toggle.classList.add('active');
+        toggle.querySelector('.toggle-text').textContent = id === 'toggle-visualizer-style' ? "RING" : "ON";
+      } else {
+        toggle.classList.remove('active');
+        toggle.querySelector('.toggle-text').textContent = id === 'toggle-visualizer-style' ? "LINE" : "OFF";
+      }
+    }
+
+    function setSliderValue(sliderId, valId, val, suffix) {
+      const slider = document.getElementById(sliderId);
+      const display = document.getElementById(valId);
+      if (slider) slider.value = val;
+      if (display) display.textContent = val + suffix;
+    }
+
+    window.updateSliderVal = function(id, val, suffix) {
+      const display = document.getElementById(`val-${id}`);
+      if (display) display.textContent = val + suffix;
+    };
+
+    window.toggleSetting = function(section, key) {
+      const toggleId = `toggle-${section === 'noise_gate' ? 'gate' : 'barge'}`;
+      const toggle = document.getElementById(toggleId);
+      if (!toggle) return;
+      const currentlyActive = toggle.classList.contains('active');
+      const newState = !currentlyActive;
+      
+      setToggleState(toggleId, newState);
+
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.save_tuning_config) {
+        window.pywebview.api.save_tuning_config(section, key, newState).then((res) => {
+          if (res && res.status === "SUCCESS") {
+            if (!activeConfig[section]) activeConfig[section] = {};
+            activeConfig[section][key] = newState;
+          }
+        });
+      }
+    };
+
+    window.commitConfig = function(section, key, value) {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.save_tuning_config) {
+        window.pywebview.api.save_tuning_config(section, key, value).then((res) => {
+          if (res && res.status === "SUCCESS") {
+            if (!activeConfig[section]) activeConfig[section] = {};
+            activeConfig[section][key] = value;
+          }
+        });
+      }
+    };
+
+    window.forceEmotion = function(emotion) {
+      // De-highlight previous buttons
+      document.querySelectorAll('.emo-btn').forEach(btn => btn.classList.remove('active'));
+      
+      // Highlight selected emotion button
+      const targetBtn = Array.from(document.querySelectorAll('.emo-btn')).find(b => b.textContent.toLowerCase().includes(emotion));
+      if (targetBtn) targetBtn.classList.add('active');
+
+      // Override local UI state immediately
+      window.setEmotion(emotion);
+    };
+
+    window.triggerSysAction = function(action) {
+      if (action === 'clear_huds') {
+        window.clearSearchHUDs();
+        closeWeaponWheel();
+      } else if (action === 'screen_capture') {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.send_text) {
+          window.pywebview.api.send_text("capture my screen");
+          closeWeaponWheel();
+        }
+      } else if (action === 'restart_session') {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_tuning_config) {
+          // Simply call empty save configuration or dedicated reloading
+          window.pywebview.api.save_tuning_config("voice", "pitch_factor", activeConfig.voice.pitch_factor).then(() => {
+            closeWeaponWheel();
+          });
+        }
+      }
+    };
+
+    // ==========================================
+    // SCI-FI AUDIO EQUALIZER VISUALIZER ENGINE
+    // ==========================================
+    let visualizerActive = false;
+    let visualizerAnimFrame = null;
+    const visualizerCanvas = document.getElementById('visualizer-canvas');
+    let visualizerCtx = null;
+    let visTime = 0;
+
+    // Persistent module-level variables for buttery-smooth liquid transitions
+    let smoothedAudioFactor = 0.0;
+    const linearBarHeights = new Array(45).fill(4);
+    const circleTickLengths = new Array(64).fill(5);
+
+    if (visualizerCanvas) {
+      visualizerCtx = visualizerCanvas.getContext('2d');
+    }
+
+    window.toggleVisualizerMode = function() {
+      const toggle = document.getElementById('toggle-visualizer');
+      if (!toggle) return;
+      const currentlyActive = toggle.classList.contains('active');
+      const newState = !currentlyActive;
+      
+      setToggleState('toggle-visualizer', newState);
+      setVisualizerMode(newState);
+
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.save_tuning_config) {
+        window.pywebview.api.save_tuning_config("live2d", "visualizer_enabled", newState).then((res) => {
+          if (res && res.status === "SUCCESS") {
+            if (!activeConfig.live2d) activeConfig.live2d = {};
+            activeConfig.live2d.visualizer_enabled = newState;
+          }
+        });
+      }
+    };
+
+    window.toggleVisualizerStyle = function() {
+      const toggle = document.getElementById('toggle-visualizer-style');
+      if (!toggle) return;
+      const currentlyActive = toggle.classList.contains('active');
+      const newState = !currentlyActive;
+      
+      setToggleState('toggle-visualizer-style', newState);
+      const newStyle = newState ? 'circle' : 'linear';
+
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.save_tuning_config) {
+        window.pywebview.api.save_tuning_config("live2d", "visualizer_style", newStyle).then((res) => {
+          if (res && res.status === "SUCCESS") {
+            if (!activeConfig.live2d) activeConfig.live2d = {};
+            activeConfig.live2d.visualizer_style = newStyle;
+          }
+        });
+      }
+    };
+
+    window.setVisualizerMode = function(enabled) {
+      visualizerActive = enabled;
+      const hiyoriCanvas = document.getElementById('canvas');
+      const audioAura = document.getElementById('audio-aura');
+      const styleRow = document.getElementById('row-visualizer-style');
+      const speechPointer = document.getElementById('speech-pointer');
+
+      if (enabled) {
+        if (hiyoriCanvas) {
+          hiyoriCanvas.style.opacity = '0';
+          hiyoriCanvas.style.pointerEvents = 'none';
+        }
+        if (audioAura) audioAura.style.display = 'none';
+        if (speechPointer) speechPointer.style.display = 'none';
+        if (visualizerCanvas) {
+          visualizerCanvas.style.display = 'block';
+          visualizerCanvas.offsetHeight; // Reflow
+          visualizerCanvas.style.opacity = '1';
+        }
+        if (styleRow) styleRow.style.display = 'flex';
+        if (live2dModel) live2dModel.visible = false; // Disable Pixi WebGL draw cycles
+        startVisualizerRenderLoop();
+      } else {
+        if (hiyoriCanvas) {
+          hiyoriCanvas.style.opacity = '0.82';
+          hiyoriCanvas.style.pointerEvents = 'auto';
+        }
+        if (audioAura) audioAura.style.display = 'block';
+        if (speechPointer) speechPointer.style.display = 'block';
+        if (visualizerCanvas) {
+          visualizerCanvas.style.opacity = '0';
+          setTimeout(() => {
+            if (!visualizerActive && visualizerCanvas) visualizerCanvas.style.display = 'none';
+          }, 300);
+        }
+        if (styleRow) styleRow.style.display = 'none';
+        if (live2dModel) live2dModel.visible = true; // Re-enable Pixi WebGL draw cycles
+        stopVisualizerRenderLoop();
+      }
+    };
+
+    function startVisualizerRenderLoop() {
+      if (!visualizerAnimFrame) {
+        renderVisualizer();
+      }
+    }
+
+    function stopVisualizerRenderLoop() {
+      if (visualizerAnimFrame) {
+        cancelAnimationFrame(visualizerAnimFrame);
+        visualizerAnimFrame = null;
+      }
+    }
+
+    function renderVisualizer() {
+      if (!visualizerActive || !visualizerCanvas || !visualizerCtx) {
+        visualizerAnimFrame = null;
+        return;
+      }
+
+      // Handle window resize dynamically
+      if (visualizerCanvas.width !== window.innerWidth || visualizerCanvas.height !== window.innerHeight) {
+        visualizerCanvas.width = window.innerWidth;
+        visualizerCanvas.height = window.innerHeight;
+      }
+
+      const width = visualizerCanvas.width;
+      const height = visualizerCanvas.height;
+      const ctx = visualizerCtx;
+
+      // Clear the canvas cleanly each frame
+      ctx.clearRect(0, 0, width, height);
+
+      visTime += 0.04;
+
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      // Define visualizer metrics globally so they are shared by linear rendering & bottom status text
+      const numBars = 45;
+      const barWidth = 6;
+      const barSpacing = 4;
+      const totalWidth = numBars * (barWidth + barSpacing) - barSpacing;
+      const startX = centerX - totalWidth / 2;
+
+      // Determine active voice factor and color scheme
+      const isSpeaking = (currentState === 'SPEAKING' && currentMouth > 0.05);
+      const isInputActive = (currentMicRMS > 180.0);
+      
+      let audioFactor = 0.0;
+      let isInputMode = true;
+      
+      if (isSpeaking) {
+        audioFactor = currentMouth * 4.5;
+        isInputMode = false;
+      } else if (isInputActive) {
+        audioFactor = currentMicRMS / 1800.0;
+        isInputMode = true;
+      }
+
+      // Buttery-smooth liquid volume interpolation
+      smoothedAudioFactor += (audioFactor - smoothedAudioFactor) * 0.18;
+
+      // Check current visualizer shape mode
+      const live2d = activeConfig.live2d || {};
+      const visualizerStyle = live2d.visualizer_style || 'linear';
+
+      const activeColorTheme = isInputMode ? 'rgba(0, 240, 255, 0.7)' : 'rgba(180, 0, 255, 0.7)';
+      const activeStrokeColor = isInputMode ? '#00f0ff' : '#ff007f';
+
+      if (visualizerStyle === 'circle') {
+        // ==========================================
+        // 1. HOLOGRAPHIC ARC REACTOR VISUAL CORE (Matching User Reference!)
+        // ==========================================
+        // A. Center solid glowing core
+        const rCenter = 44 + smoothedAudioFactor * 8.0;
+        ctx.shadowBlur = 12;
+        
+        const gradient = ctx.createRadialGradient(centerX, centerY, 5, centerX, centerY, rCenter);
+        gradient.addColorStop(0, '#e8fcfd'); // glowing whitish-cyan core
+        gradient.addColorStop(0.3, isInputMode ? 'rgba(0, 240, 255, 0.35)' : 'rgba(180, 0, 255, 0.35)');
+        gradient.addColorStop(1.0, activeColorTheme);
+        
+        ctx.fillStyle = gradient;
+        ctx.shadowColor = activeStrokeColor;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rCenter, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Glowing bright outline border
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.0;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rCenter, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // B. Intermediate Concentric Rotating Holographic Arcs
+        // Ring 1 (Inner arcs rotating clockwise)
+        const rArcs1 = rCenter + 12;
+        ctx.strokeStyle = activeStrokeColor;
+        ctx.shadowColor = activeStrokeColor;
+        ctx.lineWidth = 3.0;
+        ctx.shadowBlur = 10;
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rArcs1, visTime * 1.5, visTime * 1.5 + Math.PI * 0.55);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rArcs1, visTime * 1.5 + Math.PI, visTime * 1.5 + Math.PI * 1.55);
+        ctx.stroke();
+        
+        // Ring 2 (Middle arcs rotating counter-clockwise)
+        const rArcs2 = rArcs1 + 8;
+        ctx.lineWidth = 1.5;
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rArcs2, -visTime * 0.9, -visTime * 0.9 + Math.PI * 0.4);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rArcs2, -visTime * 0.9 + Math.PI * 0.7, -visTime * 0.9 + Math.PI * 1.1);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rArcs2, -visTime * 0.9 + Math.PI * 1.4, -visTime * 0.9 + Math.PI * 1.8);
+        ctx.stroke();
+        
+        // Ring 3 (Outer arc rotating clockwise)
+        const rArcs3 = rArcs2 + 8;
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, rArcs3, visTime * 0.4, visTime * 0.4 + Math.PI * 1.25);
+        ctx.stroke();
+        
+        // C. Outer Radial Dash Ticks (Equalizer visualization!)
+        const rTicks = rArcs3 + 12;
+        const totalTicks = 64;
+        ctx.shadowBlur = 10;
+        
+        for (let i = 0; i < totalTicks; i++) {
+          const angle = (i / totalTicks) * 2 * Math.PI;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          
+          // Symmetrical dynamic visualizer spectrum pulsing
+          const freqMod = 0.35 + 0.65 * Math.abs(Math.sin(visTime * 3.0 + i * 0.4) * Math.cos(visTime * 1.2 - i * 0.2));
+          const targetLength = 5 + Math.max(0, smoothedAudioFactor * 16.0 * freqMod + Math.sin(visTime * 1.5 + i * 0.25) * 2.0);
+          // Apply individual tick length smoothing
+          circleTickLengths[i] += (targetLength - circleTickLengths[i]) * 0.22;
+          const tickLength = circleTickLengths[i];
+          
+          ctx.beginPath();
+          ctx.moveTo(centerX + cos * rTicks, centerY + sin * rTicks);
+          ctx.lineTo(centerX + cos * (rTicks + tickLength), centerY + sin * (rTicks + tickLength));
+          
+          // Dynamic color-coding ticks based on conversation state
+          let tickColor;
+          if (isInputMode) {
+            const hue = 185 + (i / totalTicks) * (225 - 185);
+            tickColor = `hsla(${hue}, 95%, 62%, 0.88)`;
+          } else {
+            // Symmetrical tri-color speaks gradient around the core: Violet (top/bottom) -> Neon Pink (diagonals) -> Neon Green (left/right sides)
+            const halfTicks = totalTicks / 2;
+            const ratio = i < halfTicks ? (i / halfTicks) : ((totalTicks - i) / halfTicks);
+            if (ratio < 0.5) {
+              const t = ratio * 2;
+              const h = 275 + t * (330 - 275);
+              tickColor = `hsla(${h}, 100%, 60%, 0.88)`;
+            } else {
+              const t = (ratio - 0.5) * 2;
+              const h = (330 + t * 150) % 360;
+              tickColor = `hsla(${h}, 100%, 60%, 0.88)`;
+            }
+          }
+          
+          ctx.strokeStyle = tickColor;
+          ctx.shadowColor = tickColor;
+          ctx.lineWidth = 3.0; // thick sci-fi reactor dashboards
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+
+        // ==========================================
+        // D. DYNAMIC HUD CONNECTOR TRACE LINES (Connecting panels to Circle!)
+        // ==========================================
+        const connectItems = [
+          { id: 'speech-container', side: 'left' },
+          { id: 'image-results-hud', side: 'left' },
+          { id: 'terminal-hud', side: 'left' },
+          { id: 'web-search-hud', side: 'right' }
+        ];
+
+        connectItems.forEach(item => {
+          const el = document.getElementById(item.id);
+          if (!el) return;
+
+          const rect = el.getBoundingClientRect();
+          // Bulletproof check: visible when panel has class 'visible' and has non-zero layout
+          const isVisible = el.classList.contains('visible') && rect.width > 0 && rect.height > 0;
+          if (!isVisible) return;
+
+          // Compute connection point on the edge of the panel
+          let xStart = 0;
+          let yStart = rect.top + rect.height / 2;
+
+          if (item.side === 'left') {
+            xStart = rect.right;
+          } else {
+            xStart = rect.left;
+          }
+
+          // Midpoint offset: extend horizontally first to look structured
+          const horizontalExtend = 35;
+          const xMid = (item.side === 'left') ? (xStart + horizontalExtend) : (xStart - horizontalExtend);
+
+          // Outer visualizer target radius (slightly clear of moving ticks for visual order)
+          const rTarget = rTicks + 8 + smoothedAudioFactor * 4.0;
+          
+          // Calculate angle from mid inflection point to reactor center
+          const angle = Math.atan2(yStart - centerY, xMid - centerX);
+          const xTarget = centerX + Math.cos(angle) * rTarget;
+          const yTarget = centerY + Math.sin(angle) * rTarget;
+
+          // 1. Draw glowing neon connector trace line
+          ctx.beginPath();
+          ctx.moveTo(xStart, yStart);
+          ctx.lineTo(xMid, yStart);
+          ctx.lineTo(xTarget, yTarget);
+
+          ctx.shadowBlur = 6 + smoothedAudioFactor * 4.0;
+          ctx.shadowColor = activeStrokeColor;
+          ctx.strokeStyle = isInputMode ? 'rgba(0, 240, 255, 0.4)' : 'rgba(180, 0, 255, 0.4)';
+          ctx.lineWidth = 1.2 + smoothedAudioFactor * 0.8;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.stroke();
+
+          // 2. Draw white glowing terminal node at HUD panel edge
+          ctx.beginPath();
+          ctx.arc(xStart, yStart, 3, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = activeStrokeColor;
+          ctx.shadowBlur = 6;
+          ctx.fill();
+
+          // 3. Draw matching colored terminal node at visualizer circle boundary
+          ctx.beginPath();
+          ctx.arc(xTarget, yTarget, 3.5, 0, 2 * Math.PI);
+          ctx.fillStyle = activeStrokeColor;
+          ctx.shadowColor = activeStrokeColor;
+          ctx.shadowBlur = 8;
+          ctx.fill();
+
+          // 4. Animate a high-intensity data packet pulse travelling along the line
+          const pulseProgress = (visTime * 0.75) % 1.0;
+          let pulseX, pulseY;
+
+          const distAB = Math.abs(xMid - xStart);
+          const distBC = Math.sqrt((xTarget - xMid) ** 2 + (yTarget - yStart) ** 2);
+          const totalDist = distAB + distBC;
+          const ratioAB = distAB / totalDist;
+
+          if (pulseProgress < ratioAB) {
+            const segmentProgress = pulseProgress / ratioAB;
+            pulseX = xStart + (xMid - xStart) * segmentProgress;
+            pulseY = yStart;
+          } else {
+            const segmentProgress = (pulseProgress - ratioAB) / (1 - ratioAB);
+            pulseX = xMid + (xTarget - xMid) * segmentProgress;
+            pulseY = yStart + (yTarget - yStart) * segmentProgress;
+          }
+
+          ctx.beginPath();
+          ctx.arc(pulseX, pulseY, 2.5, 0, 2 * Math.PI);
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 10;
+          ctx.fill();
+        });
+      } else {
+        // ==========================================
+        // 2. LINEAR SYMMETRICAL WAVE SPECTRUM
+        // ==========================================
+
+        // Glowing central horizontal axis line
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = activeColorTheme;
+        ctx.strokeStyle = activeStrokeColor;
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+
+        // Dynamic center ripple based on audio signals
+        const lineRipple = audioFactor * 10;
+        ctx.moveTo(startX - 20, centerY);
+        for (let i = 0; i <= numBars; i++) {
+          const x = startX + i * (barWidth + barSpacing);
+          const yOffset = Math.sin(visTime * 2 + i * 0.3) * (lineRipple > 1 ? lineRipple * 0.45 : 1.2);
+          ctx.lineTo(x, centerY + yOffset);
+        }
+        ctx.lineTo(startX + totalWidth + 20, centerY);
+        ctx.stroke();
+
+        // Render symmetrical vertical spectrum bars across the full spectrum
+        for (let i = 0; i < numBars; i++) {
+          const x = startX + i * (barWidth + barSpacing);
+
+          // Symmetrical sine-window scale factor forming a smooth organic bell shape (0 at edges, 1.0 in center)
+          const waveScale = Math.sin((i / (numBars - 1)) * Math.PI);
+
+          // Dynamic frequency-band modulator simulating a high-fidelity spectrum analyzer
+          const freqMod = 0.25 + 0.75 * Math.abs(Math.sin(visTime * 3.5 + i * 0.5) * Math.cos(visTime * 1.5 - i * 0.3));
+
+          // Organic breathing oscillations for idle state
+          const idleBreathing = Math.sin(visTime + i * 0.28) * 4.0 + Math.cos(visTime * 0.75 + i * 0.15) * 2.0;
+
+          // Calculated bar height modulated by active voice levels
+          const targetHeight = 4 + Math.max(0, smoothedAudioFactor * 24.0 * waveScale * freqMod + idleBreathing * waveScale);
+          // Apply individual spectrum bar height smoothing
+          linearBarHeights[i] += (targetHeight - linearBarHeights[i]) * 0.22;
+          let barHeight = Math.min(90, linearBarHeights[i]);
+
+          // Dynamic color-coding based on conversation state
+          let barColor;
+          if (isInputMode) {
+            const hue = 185 + (i / numBars) * (225 - 185);
+            barColor = `hsla(${hue}, 95%, 62%, 0.88)`;
+          } else {
+            // Symmetrical tri-color speaks gradient: Violet (edges) -> Neon Pink -> Neon Green (center)
+            const halfBars = (numBars - 1) / 2;
+            const ratio = 1.0 - Math.abs(i - halfBars) / halfBars; // 0.0 at edges, 1.0 at center
+            if (ratio < 0.5) {
+              const t = ratio * 2;
+              const h = 275 + t * (330 - 275);
+              barColor = `hsla(${h}, 100%, 60%, 0.88)`;
+            } else {
+              const t = (ratio - 0.5) * 2;
+              const h = (330 + t * 150) % 360;
+              barColor = `hsla(${h}, 100%, 60%, 0.88)`;
+            }
+          }
+
+          ctx.fillStyle = barColor;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = barColor;
+
+          // Draw symmetrical top half capsule
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(x, centerY - barHeight - 1, barWidth, barHeight, 3);
+          } else {
+            ctx.rect(x, centerY - barHeight - 1, barWidth, barHeight);
+          }
+          ctx.fill();
+
+          // Draw symmetrical bottom half capsule
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(x, centerY + 1, barWidth, barHeight, 3);
+          } else {
+            ctx.rect(x, centerY + 1, barWidth, barHeight);
+          }
+          ctx.fill();
+        }
+      }
+
+      // Reset shadows for details rendering
+      ctx.shadowBlur = 0;
+
+      // High-tech annotations
+      ctx.font = '8px monospace';
+      ctx.fillStyle = isInputMode ? 'rgba(0, 240, 255, 0.45)' : 'rgba(180, 0, 255, 0.45)';
+      ctx.fillText(isInputMode ? 'SYS_AUDIO_INPUT: ACTIVE' : 'SYS_AUDIO_INPUT: STANDBY', startX, centerY - 115);
+      
+      ctx.fillText(!isInputMode ? 'SYS_AUDIO_OUTPUT: ACTIVE' : 'SYS_AUDIO_OUTPUT: STANDBY', startX + totalWidth - 145, centerY - 115);
+
+      // Cyber boundary bounding grid lines
+      ctx.strokeStyle = isInputMode ? 'rgba(0, 240, 255, 0.15)' : 'rgba(180, 0, 255, 0.15)';
+      ctx.lineWidth = 1.0;
+      ctx.beginPath();
+      ctx.moveTo(startX, centerY - 108);
+      ctx.lineTo(startX + totalWidth, centerY - 108);
+      ctx.moveTo(startX, centerY + 108);
+      ctx.lineTo(startX + totalWidth, centerY + 108);
+      ctx.stroke();
+
+      visualizerAnimFrame = requestAnimationFrame(renderVisualizer);
+    }
 
     init();
   </script>

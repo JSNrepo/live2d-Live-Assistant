@@ -123,6 +123,9 @@ def run_shell_command(command: str, require_confirmation: bool = False, confirme
         require_confirmation: Set True to force confirmation even for non-critical commands.
         confirmed: Set True if the user has already confirmed the command via confirm_critical_action.
     """
+    # C2: Sanitize actual newline/carriage-return characters to prevent injection
+    command = command.replace('\n', ' ').replace('\r', ' ').strip()
+
     # Safety check — always require confirmation for dangerous patterns
     is_critical = _is_critical_command(command) or require_confirmation
     if is_critical and not confirmed:

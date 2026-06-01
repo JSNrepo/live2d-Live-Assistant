@@ -1,7 +1,7 @@
 [voice]
 voice_name = "Leda"
 model = "gemini-3.1-flash-live-preview"
-pitch_factor = 1.18
+pitch_factor = 1.2
 
 # [session] (RESERVED FOR FUTURE USE — Currently ignored by core pipeline)
 # allow_barge_in = true
@@ -40,7 +40,8 @@ recv_rate = 24000
 chunk = 1024
 
 [persona]
-persona_file = "personac.txt"
+persona_file = "hyori.txt"
+user_name = "vinoth"
 
 [live2d]
 enabled = true
@@ -48,8 +49,10 @@ width = 950
 height = 700
 scale = 0.25
 y_offset = -20
+visualizer_enabled = false
+visualizer_style = "circle"
 
 [barge_in]
-enabled = true
+enabled = false
 threshold = 80.0
 feedback_ratio = 0.0  # Set to 0.0 for headphones (instant interruption) or 0.1-0.2 for speakers

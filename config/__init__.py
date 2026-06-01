@@ -41,17 +41,20 @@ EMOTION_TAG_MAP = {
     "speaking": "speaking",
 }
 
-# Logging
+# Logging — H4: RotatingFileHandler for production (5MB, 3 backups)
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    filename=LOG_DIR / "debug.log",
-    level=logging.DEBUG,
-    format="%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-    filemode="w",
+
+from logging.handlers import RotatingFileHandler
+_log_handler = RotatingFileHandler(
+    LOG_DIR / "debug.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
 )
+_log_handler.setFormatter(logging.Formatter(
+    "%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
+))
 log = logging.getLogger("sakura")
+log.setLevel(logging.DEBUG)
+log.addHandler(_log_handler)
 
 # Emotion data
 EMOTIONS_PATH = PROJECT_ROOT / "emoticons.json"
@@ -87,6 +90,9 @@ CHUNK = 1024
 PITCH_SHIFT = 1.6
 VOICE_NAME = "Leda"
 
+# User name (M4: configurable, avoids hardcoding)
+USER_NAME = "vinoth"
+
 # Noise Gate settings
 NOISE_GATE_ENABLED = True  # Enabled by default for voice companion quality
 NOISE_GATE_MIN_RMS = 20.0
@@ -100,75 +106,91 @@ BARGE_IN_FEEDBACK_RATIO = 0.0
 CONFIG_PATH = PROJECT_ROOT / "config.toml"
 PERSONA_PATH = PROJECT_ROOT / "persona.txt"
 
-if CONFIG_PATH.exists():
-    try:
-        with open(CONFIG_PATH, "rb") as f:
-            config_data = tomllib.load(f)
+def reload_config():
+    """Reloads the active configurations from config.toml dynamically."""
+    global VOICE_NAME, LIVE_MODEL, MODEL, PITCH_SHIFT, SEND_RATE, RECV_RATE, CHUNK
+    global TASK_MODEL, VISION_MODEL, NOISE_GATE_ENABLED, NOISE_GATE_MIN_RMS
+    global NOISE_GATE_HOLD_FRAMES, BARGE_IN_ENABLED, BARGE_IN_THRESHOLD, BARGE_IN_FEEDBACK_RATIO
+    global PERSONA_PATH, USER_NAME, SYSTEM_INSTRUCTION
 
-        voice_cfg = config_data.get("voice", {})
-        VOICE_NAME = voice_cfg.get("voice_name", VOICE_NAME)
-        LIVE_MODEL = voice_cfg.get("model", LIVE_MODEL)
-        MODEL = LIVE_MODEL
-        PITCH_SHIFT = voice_cfg.get("pitch_factor", PITCH_SHIFT)
+    if CONFIG_PATH.exists():
+        try:
+            with open(CONFIG_PATH, "rb") as f:
+                config_data = tomllib.load(f)
 
-        audio_cfg = config_data.get("audio", {})
-        SEND_RATE = audio_cfg.get("send_rate", SEND_RATE)
-        RECV_RATE = audio_cfg.get("recv_rate", RECV_RATE)
-        CHUNK = audio_cfg.get("chunk", CHUNK)
-        if "pitch_shift" in audio_cfg:
-            PITCH_SHIFT = audio_cfg["pitch_shift"]
+            voice_cfg = config_data.get("voice", {})
+            VOICE_NAME = voice_cfg.get("voice_name", VOICE_NAME)
+            LIVE_MODEL = voice_cfg.get("model", LIVE_MODEL)
+            MODEL = LIVE_MODEL
+            PITCH_SHIFT = voice_cfg.get("pitch_factor", PITCH_SHIFT)
 
-        models_cfg = config_data.get("models", {})
-        LIVE_MODEL = models_cfg.get("live", LIVE_MODEL)
-        MODEL = LIVE_MODEL
-        TASK_MODEL = models_cfg.get("task", TASK_MODEL)
-        VISION_MODEL = models_cfg.get("vision", VISION_MODEL)
+            audio_cfg = config_data.get("audio", {})
+            SEND_RATE = audio_cfg.get("send_rate", SEND_RATE)
+            RECV_RATE = audio_cfg.get("recv_rate", RECV_RATE)
+            CHUNK = audio_cfg.get("chunk", CHUNK)
+            if "pitch_shift" in audio_cfg:
+                PITCH_SHIFT = audio_cfg["pitch_shift"]
 
-        gate_cfg = config_data.get("noise_gate", {})
-        NOISE_GATE_ENABLED = gate_cfg.get("enabled", NOISE_GATE_ENABLED)
-        NOISE_GATE_MIN_RMS = gate_cfg.get("min_rms", NOISE_GATE_MIN_RMS)
-        NOISE_GATE_HOLD_FRAMES = gate_cfg.get("hold_frames", NOISE_GATE_HOLD_FRAMES)
+            models_cfg = config_data.get("models", {})
+            LIVE_MODEL = models_cfg.get("live", LIVE_MODEL)
+            MODEL = LIVE_MODEL
+            TASK_MODEL = models_cfg.get("task", TASK_MODEL)
+            VISION_MODEL = models_cfg.get("vision", VISION_MODEL)
 
-        barge_cfg = config_data.get("barge_in", {})
-        BARGE_IN_ENABLED = barge_cfg.get("enabled", BARGE_IN_ENABLED)
-        BARGE_IN_THRESHOLD = barge_cfg.get("threshold", BARGE_IN_THRESHOLD)
-        BARGE_IN_FEEDBACK_RATIO = barge_cfg.get("feedback_ratio", BARGE_IN_FEEDBACK_RATIO)
+            gate_cfg = config_data.get("noise_gate", {})
+            NOISE_GATE_ENABLED = gate_cfg.get("enabled", NOISE_GATE_ENABLED)
+            NOISE_GATE_MIN_RMS = gate_cfg.get("min_rms", NOISE_GATE_MIN_RMS)
+            NOISE_GATE_HOLD_FRAMES = gate_cfg.get("hold_frames", NOISE_GATE_HOLD_FRAMES)
 
-        persona_cfg = config_data.get("persona", {})
-        if "persona_file" in persona_cfg:
-            PERSONA_PATH = PROJECT_ROOT / persona_cfg["persona_file"]
-    except Exception as e:
-        print(f"Warning: Failed to load config.toml: {e}. Using defaults.")
+            barge_cfg = config_data.get("barge_in", {})
+            BARGE_IN_ENABLED = barge_cfg.get("enabled", BARGE_IN_ENABLED)
+            BARGE_IN_THRESHOLD = barge_cfg.get("threshold", BARGE_IN_THRESHOLD)
+            BARGE_IN_FEEDBACK_RATIO = barge_cfg.get("feedback_ratio", BARGE_IN_FEEDBACK_RATIO)
 
-# Load system instruction (persona) from file
-if PERSONA_PATH.exists():
-    try:
-        with open(PERSONA_PATH, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-            content = content.replace("[name]", "vinoth")
-            content = re.sub(r"\bFire\b", "vinoth", content)
-            content = re.sub(r"\bfire\b", "vinoth", content)
-            tool_use_instructions = (
-                "\n\n[CRITICAL TOOL USE INSTRUCTIONS]\n"
-                "- Proactive Tool Usage: You have access to powerful tools like `run_shell_command` (to run Linux terminal commands) and `run_browser_task` (for browser automation).\n"
-                "- Browser & Web Tasks Delegation: For ANY browser actions, searches, or web interactions (like 'go to YouTube and play a song', 'check my Gmail', 'click the search bar and type X', 'scroll down and read the first article'), you MUST call `run_browser_task` with the detailed description. Do NOT say 'I can't do it' or 'I don't have internet access'. `run_browser_task` is your fully autonomous background agent that has full browser control via Kimi WebBridge.\n"
-                "- Screen Vision: For any requests to 'look at my screen', 'see what I am doing', or ask visual questions about active windows, you MUST call `analyze_screen`.\n"
-                "- Do NOT Hardcode: Never make up or assume answers or hardcode system details, time, or file paths. Proactively run shell commands or search/browse the web to retrieve accurate, real-world data before answering.\n"
-                "- Multi-tool Efficiency: Work dynamically. You are expected to handle complex tasks on the terminal and browser — run commands, list processes, check files, launch browsers, and navigate to tabs to execute the user's requests accurately."
-            )
-            SYSTEM_INSTRUCTION = content + tool_use_instructions
-    except Exception as e:
-        print(f"Warning: Failed to load persona file: {e}. Using fallback instruction.")
-        SYSTEM_INSTRUCTION = "You are a helpful assistant."
-else:
-    SYSTEM_INSTRUCTION = (
-        "You are a helpful, knowledgeable, and polite AI desktop assistant. "
-        "You help the user with a wide range of tasks including answering questions, "
-        "running shell commands, browsing the web, analyzing screenshots, and managing their computer. "
-        "Always respond clearly, accurately, and concisely. "
-        "If you are unsure about something, say so honestly rather than guessing. "
-        "Use your available tools proactively to give precise, real-world answers."
-    )
+            persona_cfg = config_data.get("persona", {})
+            if "persona_file" in persona_cfg:
+                PERSONA_PATH = PROJECT_ROOT / persona_cfg["persona_file"]
+            USER_NAME = persona_cfg.get("user_name", USER_NAME)
+            
+            log.info("Config successfully reloaded dynamically!")
+        except Exception as e:
+            log.error("Failed to dynamically reload config.toml: %s", e)
+
+    # Load system instruction (persona) from file
+    if PERSONA_PATH.exists():
+        try:
+            with open(PERSONA_PATH, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                content = content.replace("[name]", USER_NAME)
+                content = re.sub(r"\bFire\b", USER_NAME, content)
+                content = re.sub(r"\bfire\b", USER_NAME, content)
+                tool_use_instructions = (
+                    "\n\n[CRITICAL TOOL USE INSTRUCTIONS]\n"
+                    "- Proactive Tool Usage: You have access to powerful tools like `run_shell_command` (to run Linux terminal commands), `search_web_contents` (for fast backend searches), and `run_browser_task` (for browser automation).\n"
+                    "- Browser & Web Tasks Delegation:\n"
+                    "  1. For simple web searches, questions, news lookups, or information retrieval (e.g. 'what is the time in New York', 'search for python latest version', 'who won the match'), you MUST call `search_web_contents` (this is incredibly fast, single-shot, and displays results inside the gorgeous desktop HUD columns!).\n"
+                    "  2. For complex, multi-step web browser tasks, account interactions, clicks, form fills, or tab automations (e.g. 'go to YouTube and search/play a song', 'check my Gmail', 'click the search bar and type X', 'scroll down and read the first article'), you MUST call `run_browser_task`.\n"
+                    "  Do NOT say 'I can't do it' or 'I don't have internet access'. You are a fully autonomous desktop assistant with complete internet connectivity.\n"
+                    "- Screen Vision: For any requests to 'look at my screen', 'see what I am doing', or ask visual questions about active windows, you MUST call `analyze_screen`.\n"
+                    "- Do NOT Hardcode: Never make up or assume answers or hardcode system details, time, or file paths. Proactively run shell commands or search/browse the web to retrieve accurate, real-world data before answering.\n"
+                    "- Multi-tool Efficiency: Work dynamically. You are expected to handle complex tasks on the terminal and browser — run commands, list processes, check files, launch browsers, and navigate to tabs to execute the user's requests accurately."
+                )
+                SYSTEM_INSTRUCTION = content + tool_use_instructions
+        except Exception as e:
+            log.warning("Failed to load persona file: %s. Using fallback instruction.", e)
+            SYSTEM_INSTRUCTION = "You are a helpful assistant."
+    else:
+        SYSTEM_INSTRUCTION = (
+            "You are a helpful, knowledgeable, and polite AI desktop assistant. "
+            "You help the user with a wide range of tasks including answering questions, "
+            "running shell commands, browsing the web, analyzing screenshots, and managing their computer. "
+            "Always respond clearly, accurately, and concisely. "
+            "If you are unsure about something, say so honestly rather than guessing. "
+            "Use your available tools proactively to give precise, real-world answers."
+        )
+
+# Run initial load at module import
+reload_config()
 
 use_curses = True
 

@@ -1,11 +1,14 @@
 import asyncio
 import curses
+import datetime
+import json
 import logging
 import os
 import signal
 import sys
 import threading
 import time
+import traceback
 import atexit
 import shutil
 import psutil
@@ -14,7 +17,7 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
-from config import AppState, log, MODEL, VOICE_NAME, SYSTEM_INSTRUCTION, use_curses
+from config import AppState, log, MODEL, TASK_MODEL, VOICE_NAME, SYSTEM_INSTRUCTION, use_curses
 from live2d import ui, ui_lock, get_face, set_state, send_live2d_cmd
 from tools.sounds import play_local_sound, stop_any_music
 from tools.media import monitor_music_and_vibe
@@ -67,18 +70,32 @@ async def monitor_gui_process():
     # Wait 8 seconds for startup initially
     await asyncio.sleep(8)
 
+    cached_pid = None
+
     def _find_gui_proc():
+        nonlocal cached_pid
+        if cached_pid is not None:
+            try:
+                proc = psutil.Process(cached_pid)
+                cmdline = proc.cmdline() or []
+                if any('live2d_gui.py' in c for c in cmdline):
+                    return cached_pid
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                cached_pid = None
+
         for proc in psutil.process_iter(['pid', 'cmdline']):
             try:
                 cmdline = proc.info.get('cmdline') or []
                 if any('live2d_gui.py' in c for c in cmdline):
-                    return proc
+                    cached_pid = proc.info['pid']
+                    return cached_pid
             except Exception:
                 pass
         return None
 
     def _restart_gui():
         """Restart the live2d_gui.py as a new background process."""
+        nonlocal cached_pid
         try:
             python_exe = sys.executable
             gui_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'live2d_gui.py')
@@ -96,6 +113,7 @@ async def monitor_gui_process():
                 stderr=_sp.DEVNULL,
                 env=env,
             )
+            cached_pid = proc.pid
             log.warning("GUI restarted with PID %d", proc.pid)
             return proc
         except Exception as e:
@@ -227,12 +245,13 @@ async def run_session():
             # Load memory graph facts (Hot Path) and append to SYSTEM_INSTRUCTION
             memories_str = ""
             try:
-                import json
                 memory_file = Path(__file__).resolve().parent / "memory_graph.json"
                 if memory_file.exists():
                     with open(memory_file, "r", encoding="utf-8") as mf:
                         graph_data = json.load(mf)
                     edges = graph_data.get("edges", [])
+                    # C3: Only inject the most recent 200 facts to cap system instruction size
+                    edges = edges[-200:]
                     if edges:
                         facts = []
                         for edge in edges:
@@ -529,9 +548,6 @@ async def run_session():
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            import traceback
-            import datetime
-
             # Unwrap ExceptionGroup if needed (Python 3.11+ standard)
             base_exceptions = list(e.exceptions) if hasattr(e, "exceptions") else [e]
             
@@ -569,6 +585,12 @@ async def run_session():
 
             log_path = Path(__file__).resolve().parent / "logs" / "session_errors.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
+            # H3: Cap session error log at 1MB to prevent unbounded growth
+            if log_path.exists() and log_path.stat().st_size > 1_000_000:
+                try:
+                    log_path.unlink()
+                except Exception:
+                    pass
             with open(log_path, "a") as f:
                 f.write(f"\n--- SESSION ERROR at {datetime.datetime.now()} ---\n")
                 f.write(traceback.format_exc())
@@ -742,7 +764,7 @@ async def run_text_task_cli(prompt: str):
         )
         return
 
-    model_id = "gemini-3.1-flash-lite"
+    model_id = TASK_MODEL
     cli_client = genai.Client(api_key=api_key)
 
     tools_map = {
@@ -1108,9 +1130,23 @@ def check_single_instance() -> None:
                 pid = int(PID_FILE.read_text().strip())
                 # Check if process actually exists
                 os.kill(pid, 0)
-                # If no exception, process is running!
-                print(f"(x_x) Sakura is already running (PID {pid}). Exiting.")
-                sys.exit(1)
+                # If no exception, process is running! Let's terminate it to restart.
+                print(f"[Launcher] Sakura is already running (PID {pid}). Terminating existing process to restart...")
+                import signal
+                import time
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    for _ in range(15):
+                        time.sleep(0.1)
+                        try:
+                            os.kill(pid, 0)
+                        except OSError:
+                            break
+                    else:
+                        os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                PID_FILE.unlink(missing_ok=True)
             except (ValueError, OSError):
                 # PID file is stale or unreadable; delete it atomically and retry once
                 PID_FILE.unlink(missing_ok=True)

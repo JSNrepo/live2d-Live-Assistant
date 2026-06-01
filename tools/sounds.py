@@ -19,6 +19,26 @@ def _restore_stderr(fd):
     os.close(fd)
 
 
+# H1: Module-level PyAudio singleton — avoids re-querying all audio devices per sound
+_pya_singleton = None
+_pya_init_done = False
+
+
+def _get_pya():
+    """Lazily initialize a singleton PyAudio instance with ALSA warnings silenced."""
+    global _pya_singleton, _pya_init_done
+    if _pya_singleton is None or not _pya_init_done:
+        fd = _silence_alsa()
+        try:
+            import time
+            _pya_singleton = pyaudio.PyAudio()
+            time.sleep(0.15)
+            _pya_init_done = True
+        finally:
+            _restore_stderr(fd)
+    return _pya_singleton
+
+
 def play_local_sound(filename: str):
     log.debug("play_sound %s", filename)
     if filename.endswith(".wav"):
@@ -31,16 +51,15 @@ def play_local_sound(filename: str):
     if not sound_path.exists():
         log.debug("play_sound not_found %s", sound_path)
         return
-    pya = None
     stream = None
     try:
         with open(sound_path, "rb") as f:
             data = f.read()
 
+        pya = _get_pya()
         fd = _silence_alsa()
         try:
             import time
-            pya = pyaudio.PyAudio()
             stream = pya.open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
             time.sleep(0.15)
         finally:
@@ -57,11 +76,6 @@ def play_local_sound(filename: str):
             try:
                 stream.stop_stream()
                 stream.close()
-            except Exception:
-                pass
-        if pya:
-            try:
-                pya.terminate()
             except Exception:
                 pass
 

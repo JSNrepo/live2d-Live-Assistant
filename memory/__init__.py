@@ -9,6 +9,9 @@ from config import PROJECT_ROOT
 
 log = logging.getLogger("sakura")
 
+# C3: Maximum number of memory edges to prevent unbounded growth
+MAX_EDGES = 500
+
 
 class MemoryGraph:
     def __init__(self, filepath=None):
@@ -52,6 +55,11 @@ class MemoryGraph:
                 if edge["source"] == s and edge["relation"] == r and edge["target"] == t:
                     return {"result": f"Fact already remembered: {s} {r} {t}"}
             self.data["edges"].append({"source": s, "relation": r, "target": t})
+            # C3: Enforce maximum edge limit — evict oldest facts (FIFO)
+            if len(self.data["edges"]) > MAX_EDGES:
+                evicted = len(self.data["edges"]) - MAX_EDGES
+                self.data["edges"] = self.data["edges"][-MAX_EDGES:]
+                log.info("Memory graph pruned: evicted %d oldest edges (cap=%d)", evicted, MAX_EDGES)
         self.save()
         return {"result": f"Successfully remembered: {s} {r} {t}"}
 

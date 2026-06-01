@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import math
 import os
 import re
@@ -10,8 +11,9 @@ import queue
 import threading
 from google.genai import types
 
-from config import AppState, log, SEND_RATE, RECV_RATE, CHUNK, PITCH_SHIFT, VOICE_NAME, EMOTION_TAG_MAP, NOISE_GATE_ENABLED, NOISE_GATE_MIN_RMS, NOISE_GATE_HOLD_FRAMES, BARGE_IN_ENABLED, BARGE_IN_THRESHOLD, BARGE_IN_FEEDBACK_RATIO
-from live2d import ui, ui_lock, set_state, send_live2d_cmd
+import config
+from config import AppState, log, SEND_RATE, RECV_RATE, CHUNK, VOICE_NAME, EMOTION_TAG_MAP, use_curses
+from live2d import ui, ui_lock, set_state, send_live2d_cmd, is_shutdown
 from tools.sounds import play_local_sound
 
 # Import all tools for dispatcher
@@ -19,26 +21,139 @@ from tools.system import get_system_health, get_current_time, confirm_critical_a
 from tools.media import play_song_online, stop_music, pause_resume_music, control_browser_media, show_images_online, open_browser
 from memory import remember_relationship, forget_relationship, get_relationship_graph
 
-# Setup Alsa silencer
-def _silence_alsa():
-    old = os.dup(2)
-    null = os.open(os.devnull, os.O_WRONLY)
-    os.dup2(null, 2)
-    os.close(null)
-    return old
+# Permanent ALSA / C-level stderr silencing system
+# Redirects C-level stderr (fd 2) permanently to /dev/null to silence PortAudio/ALSA warnings.
+# Re-routes Python's sys.stderr to a duplicated descriptor to preserve all exceptions.
+real_stderr_fd = os.dup(2)
+null_fd = os.open(os.devnull, os.O_WRONLY)
+os.dup2(null_fd, 2)
+os.close(null_fd)
 
+system_rms = 0.0
+_monitor_thread_started = False
 
-def _restore_stderr(fd):
-    os.dup2(fd, 2)
-    os.close(fd)
+def find_pulse_monitor_source():
+    import subprocess
+    try:
+        out = subprocess.check_output(["pactl", "list", "short", "sources"]).decode("utf-8")
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                name = parts[1]
+                # Match the default pci analog-stereo monitor
+                if name.endswith(".monitor") and "pci-" in name and "analog-stereo" in name:
+                    return name
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                name = parts[1]
+                if name.endswith(".monitor") and "loop" not in name:
+                    return name
+    except Exception:
+        pass
+    return None
 
+def monitor_thread_worker():
+    global system_rms
+    log.info("[System Monitor] Locating PulseAudio monitor loopback source...")
+    monitor_source = find_pulse_monitor_source()
+    if not monitor_source:
+        log.info("[System Monitor] No hardware monitor source found. Loopback disabled.")
+        return
+        
+    log.info(f"[System Monitor] Target monitor source: {monitor_source}")
+    
+    # Temporarily set PULSE_SOURCE to target the monitor loopback
+    env_copy = os.environ.copy()
+    os.environ["PULSE_SOURCE"] = monitor_source
+    
+    p = pyaudio.PyAudio()
+    
+    # Locate pure 'pulse' or 'default' device index (ALSA sysdefault will bypass environment variables)
+    pulse_index = None
+    for i in range(p.get_device_count()):
+        try:
+            dev = p.get_device_info_by_index(i)
+            name = dev["name"].lower()
+            if name == "pulse":
+                pulse_index = i
+                break
+        except Exception:
+            pass
+            
+    if pulse_index is None:
+        for i in range(p.get_device_count()):
+            try:
+                dev = p.get_device_info_by_index(i)
+                name = dev["name"].lower()
+                if name == "default":
+                    pulse_index = i
+                    break
+            except Exception:
+                pass
 
-fd = _silence_alsa()
+    log.info(f"[System Monitor] Opening PyAudio stream index {pulse_index} with PULSE_SOURCE={monitor_source}")
+    try:
+        stream = p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=SEND_RATE,
+            input=True,
+            input_device_index=pulse_index,
+            frames_per_buffer=CHUNK,
+        )
+    except Exception as e:
+        log.error(f"[System Monitor] Failed to open monitor stream: {e}")
+        p.terminate()
+        return
+    finally:
+        # Restore environment immediately so other processes are unaffected
+        os.environ.clear()
+        os.environ.update(env_copy)
+
+    kw = {"exception_on_overflow": False} if __debug__ else {}
+    
+    try:
+        while not (is_shutdown() or _audio_shutdown.is_set()):
+            try:
+                data = stream.read(CHUNK, **kw)
+                samples = np.frombuffer(data, dtype=np.int16).astype(np.float64)
+                if len(samples) > 0:
+                    system_rms = math.sqrt(np.mean(samples ** 2))
+                else:
+                    system_rms = 0.0
+            except Exception:
+                time.sleep(0.1)
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+        p.terminate()
+
+import io
+import sys
+sys.stderr = os.fdopen(real_stderr_fd, "w", closefd=True)
+
 pya = pyaudio.PyAudio()
-_restore_stderr(fd)
 
 # Shared Queues
 mic_q: asyncio.Queue = asyncio.Queue(maxsize=10)
+
+
+def _safe_put_mic_q(chunk):
+    """Pushes audio chunks into mic_q, evicting the oldest chunk if the queue is full to prevent QueueFull crashes."""
+    try:
+        if mic_q.full():
+            try:
+                mic_q.get_nowait()
+            except Exception:
+                pass
+        mic_q.put_nowait(chunk)
+    except Exception:
+        pass
+
+
 spk_q: asyncio.Queue = asyncio.Queue()
 spk_thread_q = queue.Queue()
 session_send_q: asyncio.Queue = asyncio.Queue()
@@ -49,7 +164,10 @@ text_input_q: asyncio.Queue = asyncio.Queue()
 _mic_thread_started = False
 _play_thread_started = False
 _active_loop = None
-_pending_texts = []
+# H5: Thread-safe deque for pending texts (replaces plain list)
+_pending_texts = collections.deque()
+# M6: Shutdown signal for graceful audio thread termination
+_audio_shutdown = threading.Event()
 
 
 def flush_audio_stream():
@@ -155,7 +273,10 @@ def text_input_listener():
         try:
             data, _ = sock.recvfrom(65536)
             msg = data.decode("utf-8").strip()
-            if msg.startswith("text_input:"):
+            if msg == "config_reload":
+                config.reload_config()
+                continue
+            elif msg.startswith("text_input:"):
                 text = msg[len("text_input:"):]
                 global _active_loop
                 if _active_loop:
@@ -170,8 +291,8 @@ def text_input_listener():
 async def text_input_sender(session):
     """Watches text_input_q for typed messages from the GUI prompt box and sends them as user text turns."""
     log.debug("text_input_sender start")
-    global _text_listener_started, _active_loop
-    _active_loop = asyncio.get_running_loop()
+    global _text_listener_started
+    # L2: _active_loop is set once in main_async, no need to set again here
     
     if not _text_listener_started:
         import threading
@@ -183,11 +304,12 @@ async def text_input_sender(session):
     # Flush any buffered text prompts received during startup / PAM auth
     while _pending_texts:
         try:
-            text = _pending_texts.pop(0)
+            text = _pending_texts.popleft()
             log.info("Flushing buffered text prompt: %s", text[:80])
             text_input_q.put_nowait(text)
-        except Exception as e:
+        except (IndexError, Exception) as e:
             log.warning("Failed to flush buffered text: %s", e)
+            break
             
     while True:
         try:
@@ -207,20 +329,14 @@ def mic_thread_worker(loop):
     info = pya.get_default_input_device_info()
     
     def open_stream():
-        fd = _silence_alsa()
-        try:
-            stream = pya.open(
-                format=pyaudio.paInt16,
-                channels=1,
-                rate=SEND_RATE,
-                input=True,
-                input_device_index=info["index"],
-                frames_per_buffer=CHUNK,
-            )
-            time.sleep(0.15)
-            return stream
-        finally:
-            _restore_stderr(fd)
+        return pya.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=SEND_RATE,
+            input=True,
+            input_device_index=info["index"],
+            frames_per_buffer=CHUNK,
+        )
 
     try:
         stream = open_stream()
@@ -231,49 +347,67 @@ def mic_thread_worker(loop):
     kw = {"exception_on_overflow": False} if __debug__ else {}
     consecutive_zeros = 0
     
-    while True:
-        try:
-            data = stream.read(CHUNK, **kw)
-            
-            # Check for digital silence (all zeros indicating ALSA capture block)
-            samples = np.frombuffer(data, dtype=np.int16)
-            if len(samples) > 0 and np.all(samples == 0):
-                consecutive_zeros += 1
-                if consecutive_zeros >= 80: # ~5 seconds of silence
-                    log.warning("⚠️ [ALSA Recovery] Digital silence detected. Re-opening mic stream in background thread...")
-                    try:
-                        stream.close()
-                    except Exception:
-                        pass
-                    time.sleep(0.5)
-                    stream = open_stream()
-                    consecutive_zeros = 0
-            else:
-                consecutive_zeros = 0
+    try:
+        while not (is_shutdown() or _audio_shutdown.is_set()):
+            try:
+                data = stream.read(CHUNK, **kw)
                 
-            global _active_loop
-            target_loop = _active_loop if _active_loop is not None else loop
-            target_loop.call_soon_threadsafe(mic_q.put_nowait, {"data": data, "mime_type": "audio/pcm"})
-            
-        except Exception as e:
-            log.error("Error in mic background thread: %s. Re-opening in 1s...", e)
-            try:
-                stream.close()
-            except Exception:
-                pass
-            time.sleep(1.0)
-            try:
-                stream = open_stream()
-            except Exception:
-                pass
+                # Check for digital silence (all zeros indicating ALSA capture block)
+                samples = np.frombuffer(data, dtype=np.int16)
+                if len(samples) > 0 and np.all(samples == 0):
+                    consecutive_zeros += 1
+                    if consecutive_zeros >= 80: # ~5 seconds of silence
+                        log.warning("⚠️ [ALSA Recovery] Digital silence detected. Re-opening mic stream in background thread...")
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
+                        time.sleep(0.5)
+                        if is_shutdown() or _audio_shutdown.is_set():
+                            break
+                        stream = open_stream()
+                        consecutive_zeros = 0
+                else:
+                    consecutive_zeros = 0
+                    
+                global _active_loop
+                target_loop = _active_loop if _active_loop is not None else loop
+                target_loop.call_soon_threadsafe(_safe_put_mic_q, {"data": data, "mime_type": "audio/pcm"})
+                
+            except Exception as e:
+                if is_shutdown() or _audio_shutdown.is_set():
+                    break
+                log.error("Error in mic background thread: %s. Re-opening in 1s...", e)
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+                time.sleep(1.0)
+                if is_shutdown() or _audio_shutdown.is_set():
+                    break
+                try:
+                    stream = open_stream()
+                except Exception:
+                    pass
+    finally:
+        log.info("Closing microphone stream gracefully...")
+        try:
+            stream.close()
+        except Exception:
+            pass
 
 async def mic_reader():
-    global _mic_thread_started, _active_loop
-    _active_loop = asyncio.get_running_loop()
+    global _mic_thread_started, _monitor_thread_started
+    # L2: _active_loop is set once in main_async, no need to set again here
     if not _mic_thread_started:
         thread = threading.Thread(target=mic_thread_worker, args=(_active_loop,), daemon=True)
         thread.start()
         _mic_thread_started = True
+        
+    if not _monitor_thread_started:
+        monitor_thread = threading.Thread(target=monitor_thread_worker, daemon=True)
+        monitor_thread.start()
+        _monitor_thread_started = True
     
     while True:
         await asyncio.sleep(3600)
@@ -281,7 +415,6 @@ async def mic_reader():
 
 async def send_audio(session):
     log.debug("send_audio start")
-    from config import use_curses
     sent = 0
     was_speaking = False
     
@@ -311,20 +444,21 @@ async def send_audio(session):
         noise_floor = min(rms_history) if rms_history else 0.0
 
         # Update thread-safe shared UIState
+        combined_rms = max(mic_rms, system_rms)
         with ui_lock:
-            ui.mic_rms = mic_rms
+            ui.mic_rms = combined_rms
             is_speaking = (ui.state == AppState.SPEAKING and (ui.model_responding or not spk_q.empty() or ui.speaker_rms > 100.0))
             current_speaker_rms = ui.speaker_rms
 
         # Broadcast mic RMS to Live2D GUI socket
-        send_live2d_cmd(f"mic_rms:{mic_rms:.2f}")
+        send_live2d_cmd(f"mic_rms:{combined_rms:.2f}")
 
         # Noise Gate Implementation with Adaptive Noise Floor Scaling (LOGIC-08)
-        if NOISE_GATE_ENABLED:
-            current_gate_min = max(NOISE_GATE_MIN_RMS, noise_floor * 1.5)
+        if config.NOISE_GATE_ENABLED:
+            current_gate_min = max(config.NOISE_GATE_MIN_RMS, noise_floor * 1.5)
             if mic_rms >= current_gate_min:
                 gate_open = True
-                hold_counter = NOISE_GATE_HOLD_FRAMES
+                hold_counter = config.NOISE_GATE_HOLD_FRAMES
             else:
                 if hold_counter > 0:
                     hold_counter -= 1
@@ -345,14 +479,14 @@ async def send_audio(session):
                 pass
 
         if is_speaking:
-            if not BARGE_IN_ENABLED:
+            if not config.BARGE_IN_ENABLED:
                 was_speaking = True
                 continue
 
             # Dynamic threshold modifier combining adaptive noise floor scaling and speaker feedback ratio.
             # Base threshold automatically scales with your microphone gain and room silent level.
-            base_threshold = max(BARGE_IN_THRESHOLD, noise_floor * 2.5)
-            barge_in_threshold = max(base_threshold, min(3500.0, current_speaker_rms * BARGE_IN_FEEDBACK_RATIO))
+            base_threshold = max(config.BARGE_IN_THRESHOLD, noise_floor * 2.5)
+            barge_in_threshold = max(base_threshold, min(3500.0, current_speaker_rms * config.BARGE_IN_FEEDBACK_RATIO))
 
             if mic_rms > barge_in_threshold:
                 log.info("Barge-in voice activity detected! mic_rms=%.1f (threshold=%.1f)", mic_rms, barge_in_threshold)
@@ -591,7 +725,6 @@ async def recv_audio(session):
                 t = sc.input_transcription.text
                 log.debug("input_transcription text='%s'", t)
                 user_utterance += t
-                from config import use_curses
                 if not use_curses:
                     try:
                         print(f"\r\033[K[You] {t}", flush=True)
@@ -603,7 +736,6 @@ async def recv_audio(session):
                     ai_turn_started = True
                     log.debug("TURN START")
                     send_live2d_cmd("start")
-                    from config import use_curses
                     if not use_curses:
                         try:
                             print("\r\033[K[AI] ", end="", flush=True)
@@ -619,7 +751,6 @@ async def recv_audio(session):
                 # 1. Clean metadata tags dynamically for terminal printing
                 clean_text = re.sub(r'(?i)\[[a-z]+\]', '', _TURN_EMOTION_BUFFER)
                 new_chars = clean_text[_LAST_PRINTED_CLEAN_LEN:]
-                from config import use_curses
                 if new_chars and not use_curses:
                     try:
                         print(new_chars, end="", flush=True)
@@ -743,17 +874,12 @@ def play_thread_worker(loop):
     global active_spk_stream
     log.debug("play_thread_worker background thread started")
     try:
-        fd = _silence_alsa()
-        try:
-            stream = pya.open(
-                format=pyaudio.paInt16,
-                channels=1,
-                rate=RECV_RATE,
-                output=True,
-            )
-            time.sleep(0.15)
-        finally:
-            _restore_stderr(fd)
+        stream = pya.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=RECV_RATE,
+            output=True,
+        )
     except Exception as e:
         log.error("Failed to open speaker stream in background thread: %s", e)
         return
@@ -767,7 +893,7 @@ def play_thread_worker(loop):
         n_in = len(chunk_arr)
         if n_in == 0:
             return chunk_arr
-        indices = np.arange(0, n_in, PITCH_SHIFT)
+        indices = np.arange(0, n_in, config.PITCH_SHIFT)
         indices = indices[indices < n_in]
         output = np.interp(indices, np.arange(n_in), chunk_arr)
         
@@ -792,80 +918,83 @@ def play_thread_worker(loop):
     chunk_id = 0
     sub_chunk_size = 960  # 20ms of audio at 24kHz 16-bit mono
 
-    while True:
-        n_in = 960
-        n_read = max(1, int(round(n_in * PITCH_SHIFT))) if abs(PITCH_SHIFT - 1.0) >= 0.005 else n_in
+    try:
+        while not (is_shutdown() or _audio_shutdown.is_set()):
+            n_in = 960
+            n_read = max(1, int(round(n_in * config.PITCH_SHIFT))) if abs(config.PITCH_SHIFT - 1.0) >= 0.005 else n_in
 
-        # Accumulate input until we have at least n_read samples
-        while len(_ps_input_buffer) < n_read:
-            # Check if there is no audio left in the thread queue
-            if spk_thread_q.empty():
-                with ui_lock:
-                    responding = ui.model_responding
-                if not responding and len(_ps_input_buffer) > 0:
-                    # Flush: pad to n_read with zeros
-                    pad_len = n_read - len(_ps_input_buffer)
-                    _ps_input_buffer = np.concatenate([_ps_input_buffer, np.zeros(pad_len, dtype=np.float32)])
-                    break
-                elif not responding:
-                    # Thread sleeps when idle to avoid burning CPU
-                    time.sleep(0.005)
+            # Accumulate input until we have at least n_read samples
+            while len(_ps_input_buffer) < n_read and not (is_shutdown() or _audio_shutdown.is_set()):
+                # Check if there is no audio left in the thread queue
+                if spk_thread_q.empty():
+                    with ui_lock:
+                        responding = ui.model_responding
+                    if not responding and len(_ps_input_buffer) > 0:
+                        # Flush: pad to n_read with zeros
+                        pad_len = n_read - len(_ps_input_buffer)
+                        _ps_input_buffer = np.concatenate([_ps_input_buffer, np.zeros(pad_len, dtype=np.float32)])
+                        break
+                    elif not responding:
+                        # Thread sleeps when idle to avoid burning CPU
+                        time.sleep(0.005)
+                        continue
+
+                try:
+                    # Synchronous blocking wait for next audio chunk
+                    data_bytes = spk_thread_q.get(timeout=0.005)
+                except queue.Empty:
                     continue
 
-            try:
-                # Synchronous blocking wait for next audio chunk
-                data_bytes = spk_thread_q.get(timeout=0.005)
-            except queue.Empty:
+                arr = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float32)
+                _ps_input_buffer = np.concatenate([_ps_input_buffer, arr])
+                # Pitch shift memory safety (N03): Cap buffer size to 24000 samples (1s of audio)
+                if len(_ps_input_buffer) > 24000:
+                    _ps_input_buffer = _ps_input_buffer[-24000:]
+
+            if is_shutdown() or _audio_shutdown.is_set():
+                break
+
+            if len(_ps_input_buffer) < n_read:
                 continue
 
-            arr = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float32)
-            _ps_input_buffer = np.concatenate([_ps_input_buffer, arr])
-            # Pitch shift memory safety (N03): Cap buffer size to 24000 samples (1s of audio)
-            if len(_ps_input_buffer) > 24000:
-                _ps_input_buffer = _ps_input_buffer[-24000:]
+            # Extract n_read samples from accumulated buffer
+            chunk_arr = _ps_input_buffer[:n_read]
+            _ps_input_buffer = _ps_input_buffer[n_read:]
 
-        if len(_ps_input_buffer) < n_read:
-            continue
+            if abs(config.PITCH_SHIFT - 1.0) >= 0.005:
+                output_arr = do_pitch_shift_chunk(chunk_arr)
+            else:
+                output_arr = chunk_arr
 
-        # Extract n_read samples from accumulated buffer
-        chunk_arr = _ps_input_buffer[:n_read]
-        _ps_input_buffer = _ps_input_buffer[n_read:]
+            data = np.clip(output_arr, -32768, 32767).astype(np.int16).tobytes()
+            chunk_id += 1
 
-        if abs(PITCH_SHIFT - 1.0) >= 0.005:
-            output_arr = do_pitch_shift_chunk(chunk_arr)
-        else:
-            output_arr = chunk_arr
+            # Slice the shift-processed audio chunk into 20ms frames for high-frequency lip-sync
+            i = 0
+            while i < len(data) and not (is_shutdown() or _audio_shutdown.is_set()):
+                sub_chunk = data[i : i + sub_chunk_size]
+                rms = calculate_rms(sub_chunk)
+                with ui_lock:
+                    ui.speaker_rms = rms
 
-        data = np.clip(output_arr, -32768, 32767).astype(np.int16).tobytes()
-        chunk_id += 1
+                # Convert RMS to mouth open value (0.0 to 1.0)
+                mouth_val = min(1.0, rms / 6000.0)
+                if mouth_val < 0.02:
+                    mouth_val = 0.0
+                send_live2d_cmd(f"mouth:{mouth_val:.2f}")
 
-        # Slice the shift-processed audio chunk into 20ms frames for high-frequency lip-sync
-        i = 0
-        while i < len(data):
-            sub_chunk = data[i : i + sub_chunk_size]
-            rms = calculate_rms(sub_chunk)
-            with ui_lock:
-                ui.speaker_rms = rms
-
-            # Convert RMS to mouth open value (0.0 to 1.0)
-            # D03: Less aggressive scaling divisor and gate for high-fidelity lip sync during soft speech
-            mouth_val = min(1.0, rms / 6000.0)
-            if mouth_val < 0.02:
-                mouth_val = 0.0
-            send_live2d_cmd(f"mouth:{mouth_val:.2f}")
-
-            # Direct synchronous hardware write - incredibly smooth!
-            try:
-                stream.write(sub_chunk)
-            except Exception as se:
-                log.error("Speaker stream write error: %s. Attempting to recover...", se)
+                # Direct synchronous hardware write - incredibly smooth!
                 try:
-                    stream.close()
-                except Exception:
-                    pass
-                time.sleep(0.5)
-                try:
-                    fd = _silence_alsa()
+                    stream.write(sub_chunk)
+                except Exception as se:
+                    if is_shutdown() or _audio_shutdown.is_set():
+                        break
+                    log.error("Speaker stream write error: %s. Attempting to recover...", se)
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+                    time.sleep(0.5)
                     try:
                         stream = pya.open(
                             format=pyaudio.paInt16,
@@ -873,23 +1002,26 @@ def play_thread_worker(loop):
                             rate=RECV_RATE,
                             output=True,
                         )
-                        time.sleep(0.15)
-                    finally:
-                        _restore_stderr(fd)
-                    active_spk_stream = stream
-                    log.info("Speaker stream successfully recovered!")
-                except Exception as ree:
-                    log.error("Failed to recover speaker stream: %s", ree)
-            i += sub_chunk_size
+                        active_spk_stream = stream
+                        log.info("Speaker stream successfully recovered!")
+                    except Exception as ree:
+                        log.error("Failed to recover speaker stream: %s", ree)
+                i += sub_chunk_size
 
-        if spk_thread_q.empty() and len(_ps_input_buffer) == 0:
-            with ui_lock:
-                ui.speaker_rms = 0.0
-                responding = ui.model_responding
-            send_live2d_cmd("mouth:0.00")
-            if not responding:
-                set_state(AppState.LISTENING, "idle", "Listening...")
-                send_live2d_cmd("stop")
+            if spk_thread_q.empty() and len(_ps_input_buffer) == 0:
+                with ui_lock:
+                    ui.speaker_rms = 0.0
+                    responding = ui.model_responding
+                send_live2d_cmd("mouth:0.00")
+                if not responding:
+                    set_state(AppState.LISTENING, "idle", "Listening...")
+                    send_live2d_cmd("stop")
+    finally:
+        log.info("Closing speaker stream gracefully...")
+        try:
+            stream.close()
+        except Exception:
+            pass
 
 async def play_audio():
     global _play_thread_started

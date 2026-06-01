@@ -28,7 +28,7 @@ else
 fi
 
 echo "[Launcher] Starting Live2D Floating Face Companion..."
-GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb ./.venv/bin/python live2d_gui.py &
+GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb ./.venv/bin/python live2d_gui.py 2>/dev/null &
 GUI_PID=$!
 
 sleep 1.5

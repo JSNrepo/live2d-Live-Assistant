@@ -103,6 +103,72 @@ def listen_udp(window):
 # UDP socket for sending text_input commands to the main pipeline
 _text_send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+
+def update_toml_value(file_path, section, key, value):
+    """
+    Safely updates a key-value pair under a specific section in config.toml
+    without modifying formatting, comments, or other sections.
+    """
+    if not os.path.exists(file_path):
+        return False
+    
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        
+    new_lines = []
+    current_section = None
+    updated = False
+    
+    # Format value appropriately for TOML
+    if isinstance(value, bool):
+        val_str = "true" if value else "false"
+    elif isinstance(value, (int, float)):
+        val_str = str(value)
+    else:
+        val_str = f'"{value}"'
+        
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current_section = stripped[1:-1].strip()
+            new_lines.append(line)
+            continue
+            
+        if current_section == section and stripped.split("=")[0].strip() == key:
+            comment = ""
+            if "#" in line:
+                comment = "  #" + line.split("#", 1)[1].strip()
+            indent = line[:len(line) - len(line.lstrip())]
+            new_lines.append(f"{indent}{key} = {val_str}{comment}\n")
+            updated = True
+        else:
+            new_lines.append(line)
+            
+    if not updated:
+        # If key wasn't found under target section, append it right before the next section
+        new_lines = []
+        current_section = None
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                if current_section == section:
+                    new_lines.append(f"{key} = {val_str}\n\n")
+                    updated = True
+                current_section = stripped[1:-1].strip()
+            new_lines.append(line)
+            
+        if current_section == section and not updated:
+            new_lines.append(f"{key} = {val_str}\n")
+            updated = True
+            
+    # Atomic write
+    temp_path = file_path + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+    os.replace(temp_path, file_path)
+    return True
+
+
 class JSBridge:
     """JavaScript API bridge exposed to pywebview. JS calls window.pywebview.api.send_text(text)."""
 
@@ -115,6 +181,41 @@ class JSBridge:
             _text_send_sock.sendto(f"text_input:{text}".encode("utf-8"), ("127.0.0.1", 10089))
         except Exception as e:
             print(f"[JSBridge] Error sending text: {e}")
+
+    def get_tuning_config(self):
+        """Loads and returns config.toml data for the weapon wheel UI."""
+        import tomllib
+        project_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(project_dir, 'config.toml')
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "rb") as f:
+                    return tomllib.load(f)
+            except Exception as e:
+                print(f"[JSBridge] Error reading config: {e}")
+        return {}
+
+    def save_tuning_config(self, section, key, value):
+        """Updates a config parameter, saves config.toml atomically, and alerts main.py over UDP."""
+        project_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(project_dir, 'config.toml')
+        try:
+            # Enforce correct type formatting for incoming JS variables
+            if key in ("enabled", "visualizer_enabled"):
+                value = bool(value)
+            elif key in ("min_rms", "threshold", "feedback_ratio", "pitch_factor", "pitch_shift"):
+                value = float(value)
+            elif key in ("hold_frames", "width", "height"):
+                value = int(value)
+
+            success = update_toml_value(config_path, section, key, value)
+            if success:
+                # Alert main.py to dynamically reload configuration instantly!
+                _text_send_sock.sendto(b"config_reload", ("127.0.0.1", 10089))
+                return {"status": "SUCCESS"}
+        except Exception as e:
+            print(f"[JSBridge] Error saving config: {e}")
+        return {"status": "ERROR"}
 
 
 

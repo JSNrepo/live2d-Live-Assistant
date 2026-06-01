@@ -72,14 +72,30 @@ def webbridge_navigate(url: str, new_tab: bool = False, session: str = "kimi") -
     """Directs the browser to a specific URL."""
     if not url.startswith("http://") and not url.startswith("https://"):
         url = "https://" + url
-    return call_webbridge("navigate", {"url": url, "newTab": new_tab}, session)
+    res = call_webbridge("navigate", {"url": url, "newTab": new_tab}, session)
+    if isinstance(res, dict) and "error" in res:
+        try:
+            import webbrowser
+            log.warning("WebBridge unavailable. Performing local browser open fallback for: %s", url)
+            webbrowser.open(url)
+            return {
+                "success": True,
+                "status": "Successfully opened website in your browser (local fallback because WebBridge extension was not connected)",
+                "tabId": 9999,
+                "fallback": True
+            }
+        except Exception as e:
+            log.error("Failed local browser open fallback: %s", e)
+    return res
 
 
 def webbridge_get_content(session: str = "kimi") -> dict:
     """Retrieves a clean, compressed representation of interactive elements on the page."""
     res = call_webbridge("snapshot", {}, session)
-    if "error" in res:
-        return res
+    if isinstance(res, dict) and "error" in res:
+        return {
+            "error": "Browser extension not connected. Cannot perform element inspection, but the page was successfully opened locally. Please open your browser and enable the WebBridge extension to connect it."
+        }
 
     tree_data = res.get("tree", [])
 

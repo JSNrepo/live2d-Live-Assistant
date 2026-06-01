@@ -475,20 +475,24 @@ async def do_background_graph_ingestion(user_text: str, ai_text: str):
 async def run_browser_task(task_description: str, session=None) -> dict:
     log.info("Starting autonomous browser task: %s", task_description)
 
-    # --- CRITICAL: Check WebBridge is active BEFORE starting the agent loop ---
+    # --- Check and Auto-Start Kimi WebBridge Daemon if offline ---
     wb_status = await asyncio.to_thread(get_webbridge_status)
+    if wb_status["status"] not in ("active", "partial"):
+        try:
+            import subprocess
+            daemon_path = Path.home() / ".kimi-webbridge/bin/kimi-webbridge"
+            if daemon_path.exists():
+                log.info("Auto-starting Kimi WebBridge daemon...")
+                subprocess.Popen([str(daemon_path), "start"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                await asyncio.sleep(0.8)
+                wb_status = await asyncio.to_thread(get_webbridge_status)
+        except Exception as start_err:
+            log.warning("Failed to auto-start Kimi WebBridge daemon: %s", start_err)
+
+    # If the extension is still not connected (partial or offline), we log a warning
+    # but ALLOW the task agent to proceed using the robust local browser fallbacks.
     if wb_status["status"] != "active":
-        err_reason = wb_status["message"]
-        log.warning("run_browser_task aborted: WebBridge not active. Reason: %s", err_reason)
-        err_msg = (
-            f"[SYSTEM ERROR: Browser automation FAILED before it could start. "
-            f"Kimi WebBridge is NOT active. Reason: {err_reason} "
-            f"Tell the user to start Kimi browser and enable the WebBridge extension on port 10086, "
-            f"then roast them for not having it running before asking for web tasks!]"
-        )
-        if session:
-            await safe_send_realtime_input(session, text=err_msg)
-        return {"success": False, "error": err_reason}
+        log.info("WebBridge status is '%s' (not active). Proceeding with robust local browser fallbacks.", wb_status["status"])
 
     async def agent_webbridge_navigate(url: str, new_tab: bool = False, session_name: str = "kimi") -> str:
         res = await asyncio.to_thread(webbridge_navigate, url, new_tab, session_name)
@@ -629,6 +633,8 @@ async def run_browser_task(task_description: str, session=None) -> dict:
                 mapped_emo = EMOTION_TAG_MAP.get(emo_tag, "speaking")
                 send_live2d_cmd(f"emotion:{mapped_emo}")
 
+            # Late import to prevent circular dependency
+            from audio.pipeline import safe_create_task
             # Send progress text asynchronously to live session to make actions lightning-fast
             safe_create_task(safe_send_realtime_input(session, text=msg))
 

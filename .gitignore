@@ -5,5 +5,17 @@ logs/
 *.pyc
 sounds/
 memory_graph.json
+
+# Development artifacts
+scratch/
 ddg_test.html
 google_mobile.html
+audit*.md
+codebase_audit*.md
+retest-report.md
+
+# IDE / editor configs
+*.code-workspace
+skills-lock.json
+.continue/
+.claude/
