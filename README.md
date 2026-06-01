@@ -5,7 +5,7 @@ character overlay, real-time audio processing, and an agentic tool layer for
 browser automation, file operations, system control, and web search.
 
 ---
-![Sakura AI Companion Interface Overlay](demos/thumbnail001.png)]
+![Sakura AI Companion Interface Overlay](demos/thumbnail001.png)
 
 ## Showcase
 
